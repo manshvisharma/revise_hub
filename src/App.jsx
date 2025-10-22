@@ -3,7 +3,7 @@ import { initializeApp } from "firebase/app";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
 import { getFirestore, doc, collection, onSnapshot, setDoc, query, updateDoc, deleteDoc, writeBatch } from "firebase/firestore";
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'; 
-import { Clock, CheckCircle, XCircle, Plus, LayoutDashboard, Calendar, Users, List, Trash2, RotateCcw, Timer } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, Plus, LayoutDashboard, Calendar, Users, List, Trash2, ArrowCounterClockwise, Timer } from 'lucide-react';
 
 // --- Firebase Configuration (Hardcoded with User's provided values for deployment) ---
 const firebaseConfig = {
@@ -691,8 +691,179 @@ const EditTopicModal = ({ userId, topic, subjects, isOpen, onClose, onSave }) =>
     );
 };
 
-// --- Calendar View Component (Implementation omitted for brevity, but correctly handled) ---
-const CalendarView = ({ topics, allSubjects }) => { /* ... implementation ... */ return <div className="text-center p-8 bg-white rounded-xl shadow-lg">Calendar view functionality is fully implemented in the running app.</div>; };
+// --- Calendar View Component ---
+
+const CalendarView = ({ topics, allSubjects }) => {
+    const [currentDate, setCurrentDate] = useState(today());
+    const [selectedDate, setSelectedDate] = useState(null);
+    const [modalOpen, setModalOpen] = useState(false);
+
+    const startOfMonth = useMemo(() => {
+        const d = new Date(currentDate);
+        d.setDate(1);
+        return d;
+    }, [currentDate]);
+
+    const daysInMonth = useMemo(() => {
+        const d = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+        return d.getDate();
+    }, [currentDate]);
+
+    const firstDayOfWeek = startOfMonth.getDay(); // 0 (Sun) to 6 (Sat)
+
+    const revisionMap = useMemo(() => {
+        const map = new Map();
+        topics.forEach(topic => {
+            // Check revision schedule
+            topic.schedule?.forEach((scheduleItem, index) => {
+                // Only consider uncompleted items (which are all we care about for planning)
+                if (!scheduleItem.completed && scheduleItem.targetDate !== Infinity) {
+                    const dateKey = dateToISOString(new Date(scheduleItem.targetDate));
+                    if (!map.has(dateKey)) {
+                        map.set(dateKey, []);
+                    }
+                    map.get(dateKey).push({
+                        type: 'Revision',
+                        topicName: topic.name,
+                        subjectName: allSubjects[topic.subjectId]?.name || 'Unknown',
+                        isMissed: scheduleItem.targetDate < TODAY_MS,
+                    });
+                }
+            });
+
+            // Check task due dates
+            if (topic.type === 'task' && topic.taskDueDate && !topic.isComplete) {
+                const dateKey = dateToISOString(new Date(topic.taskDueDate));
+                if (!map.has(dateKey)) {
+                    map.set(dateKey, []);
+                }
+                map.get(dateKey).push({
+                    type: 'Task',
+                    topicName: topic.name,
+                    subjectName: allSubjects[topic.subjectId]?.name || 'Unknown',
+                    isMissed: topic.taskDueDate < TODAY_MS,
+                });
+            }
+        });
+        return map;
+    }, [topics, allSubjects]);
+
+    const handlePrevMonth = () => {
+        const newDate = new Date(currentDate);
+        newDate.setMonth(newDate.getMonth() - 1);
+        setCurrentDate(newDate);
+        setSelectedDate(null);
+    };
+
+    const handleNextMonth = () => {
+        const newDate = new Date(currentDate);
+        newDate.setMonth(newDate.getMonth() + 1);
+        setCurrentDate(newDate);
+        setSelectedDate(null);
+    };
+
+    const handleToday = () => {
+        setCurrentDate(today());
+        setSelectedDate(today());
+        setModalOpen(true);
+    };
+
+    const handleDayClick = (dayOfMonth) => {
+        const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), dayOfMonth);
+        setSelectedDate(date);
+        setModalOpen(true);
+    };
+
+    const todayISO = dateToISOString(today());
+    const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+    return (
+        <div className="p-4 bg-white rounded-xl shadow-lg">
+            <header className="flex justify-between items-center mb-6">
+                <Button onClick={handlePrevMonth} variant="secondary">
+                    <XCircle className="w-4 h-4" />
+                </Button>
+                <div className="text-xl font-bold text-gray-800 flex flex-col items-center">
+                    {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+                    <Button onClick={handleToday} variant="secondary" className="mt-2 py-1 px-3 text-xs">Jump to Today</Button>
+                </div>
+                <Button onClick={handleNextMonth} variant="secondary">
+                    <CheckCircle className="w-4 h-4" />
+                </Button>
+            </header>
+
+            <div className="grid grid-cols-7 gap-1 text-center font-medium text-sm text-gray-500 mb-2">
+                {daysOfWeek.map(day => (
+                    <div key={day} className="py-2 text-blue-600 font-bold">{day}</div>
+                ))}
+            </div>
+
+            <div className="grid grid-cols-7 gap-1">
+                {/* Empty padding days for start of month */}
+                {[...Array(firstDayOfWeek)].map((_, i) => (
+                    <div key={`empty-${i}`} className="h-16"></div>
+                ))}
+
+                {/* Days of the month */}
+                {[...Array(daysInMonth)].map((_, i) => {
+                    const day = i + 1;
+                    const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
+                    const dateISO = dateToISOString(date);
+                    const revisionsDue = revisionMap.get(dateISO);
+                    const isToday = dateISO === todayISO;
+                    const isSelected = selectedDate && dateISO === dateToISOString(selectedDate);
+                    
+                    const hasItems = revisionsDue && revisionsDue.length > 0;
+                    
+                    const cellClasses = `h-20 flex flex-col items-center justify-center p-1 rounded-lg transition-colors cursor-pointer 
+                                         ${isToday ? 'bg-blue-100 border-2 border-blue-500' : 'bg-gray-50 hover:bg-gray-200'}
+                                         ${isSelected ? 'bg-purple-200 border-purple-500' : ''}`;
+
+                    return (
+                        <div key={day} className={cellClasses} onClick={() => handleDayClick(day)}>
+                            <span className={`font-semibold ${isToday ? 'text-blue-700' : 'text-gray-800'} text-lg`}>{day}</span>
+                            {hasItems && (
+                                <span className={`text-xs mt-1 px-2 py-0.5 rounded-full font-bold ${revisionsDue.some(r => r.isMissed) ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}>
+                                    {revisionsDue.length} Due
+                                </span>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* Revision Details Modal */}
+            <Modal 
+                isOpen={modalOpen} 
+                onClose={() => setModalOpen(false)} 
+                title={`Schedule for ${dateToString(selectedDate)}`}
+                size="sm:max-w-xl"
+            >
+                {selectedDate && revisionMap.has(dateToISOString(selectedDate)) ? (
+                    <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+                        {revisionMap.get(dateToISOString(selectedDate)).map((revision, index) => (
+                            <div 
+                                key={index} 
+                                className={`p-3 rounded-lg shadow-sm border-l-4 
+                                    ${revision.isMissed ? 'bg-red-50 border-red-500' : revision.type === 'Task' ? 'bg-purple-50 border-purple-500' : 'bg-green-50 border-green-500'}`}
+                            >
+                                <p className="font-semibold text-gray-800">{revision.topicName}</p>
+                                <div className="flex justify-between text-sm text-gray-600">
+                                    <span>Subject: {revision.subjectName}</span>
+                                    <span className="font-bold">
+                                        {revision.isMissed ? '(MISSED)' : revision.type === 'Task' ? '(TASK DUE)' : '(REVISION DUE)'}
+                                    </span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <p className="text-gray-500">Nothing scheduled for this date. Go enjoy the break!</p>
+                )}
+            </Modal>
+        </div>
+    );
+};
 
 
 // --- App Logic Component ---
@@ -1446,7 +1617,7 @@ const AppLogic = ({ userId, topics, subjects, allSubjects }) => {
 
                 {/* Tab Content */}
                 {activeTab === 'calendar' && (
-                    <CalendarView topics={topics} allSubjects={allSubjects} />
+                    <CalendarView topics={processedTopics} allSubjects={allSubjects} />
                 )}
 
                 {activeTab !== 'calendar' && (
