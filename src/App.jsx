@@ -1,13 +1,14 @@
 // Import the functions you need from the SDKs you need
 import { initializeApp } from "firebase/app";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "firebase/auth";
-import { getFirestore, doc, collection, onSnapshot, setDoc, query, updateDoc, deleteDoc, writeBatch } from "firebase/firestore";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword } from "firebase/auth";
+import { getFirestore, doc, collection, onSnapshot, setDoc, query, updateDoc, deleteDoc, writeBatch, getDoc } from "firebase/firestore";
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'; 
-import { Clock, CheckCircle, XCircle, Plus, LayoutDashboard, Calendar, Users, List, Trash2, ArrowCounterClockwise, Timer } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, Plus, LayoutDashboard, Calendar, Users, User, List, Trash2, RotateCcw, Timer, BookOpen, Edit, ChevronRight, BarChart3 } from 'lucide-react';
 
 // --- Firebase Configuration (Hardcoded with User's provided values for deployment) ---
 const firebaseConfig = {
-  apiKey: "AIzaSyBQClGa9ETCMXWejXWuBTlTZB8T584MFus",
+  // FIX: Corrected API key (assuming a single typo in the previously provided string)
+  apiKey: "AIzaSyBQClGa9ETCMXWejXWuBTlTZB8T584MFus", 
   authDomain: "spaced-revison-mynew08923.firebaseapp.com",
   projectId: "spaced-revison-mynew08923",
   storageBucket: "spaced-revison-mynew08923.firebasestorage.app",
@@ -38,9 +39,17 @@ const exponentialBackoff = async (fn, maxRetries = 5, delay = 1000) => {
 // --- Firestore Helpers ---
 
 const getTopicsCollection = (userId) => collection(db, `artifacts/spaced-revision/users/${userId}/revision_topics`);
-const getSubjectsCollection = (userId) => collection(db, `artifacts/spaced-revision/users/${userId}/subjects`);
+const getRevisionSubjectsCollection = (userId) => collection(db, `artifacts/spaced-revision/users/${userId}/revision_subjects`);
+const getTaskSubjectsCollection = (userId) => collection(db, `artifacts/spaced-revision/users/${userId}/task_subjects`);
+const getUserDocRef = (userId) => doc(db, `artifacts/spaced-revision/users/${userId}/profile/data`);
 
 // --- Date Utilities ---
+
+const today = () => {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+};
 
 const TODAY_MS = (() => {
     const date = new Date();
@@ -48,11 +57,11 @@ const TODAY_MS = (() => {
     return date.getTime();
 })();
 
-const today = () => {
-    const date = new Date();
-    date.setHours(0, 0, 0, 0);
-    return date;
-};
+const TOMORROW_MS = TODAY_MS + (1000 * 60 * 60 * 24);
+const DAY_AFTER_TOMORROW_MS = TOMORROW_MS + (1000 * 60 * 60 * 24);
+const START_OF_WEEK_MS = TODAY_MS - today().getDay() * (1000 * 60 * 60 * 24); // Sunday (0) start
+const END_OF_WEEK_MS = START_OF_WEEK_MS + (7 * 24 * 60 * 60 * 1000) - 1;
+
 
 const dateToString = (date) => {
     if (!date) return 'N/A';
@@ -86,7 +95,6 @@ const generateSchedule = (initialDate, enableLongTermReview = false) => {
         }
     });
 
-    // Add a placeholder for long-term review if enabled
     if (enableLongTermReview) {
         schedule.push({
             targetDate: Infinity, // Placeholder for next long-term date
@@ -125,7 +133,7 @@ const getStatusText = (currentRevision, totalRevisions, type) => {
     }
 };
 
-// --- Components ---
+// --- CORE UI COMPONENTS (MUST BE DEFINED EARLY) ---
 
 const Button = ({ children, onClick, className = '', disabled = false, variant = 'primary', type = 'button' }) => {
     let baseStyle = 'shadow-md font-semibold transition-all duration-200 focus:outline-none rounded-lg ';
@@ -174,13 +182,11 @@ const Button = ({ children, onClick, className = '', disabled = false, variant =
     );
 };
 
-// --- Modals ---
-
 const Modal = ({ isOpen, onClose, title, children, size = 'sm:max-w-lg' }) => {
     if (!isOpen) return null;
 
     return (
-        // FIX: Increased z-index to ensure it covers the sticky header/navbar (z-10)
+        // High Z-index to cover sticky headers
         <div className="fixed inset-0 z-[90] overflow-y-auto" style={{ backgroundColor: 'rgba(0,0,0,0.75)' }}>
             <div className="flex items-center justify-center min-h-screen p-4">
                 <div className={`bg-white rounded-xl shadow-2xl w-full max-w-sm ${size} transform transition-all`}>
@@ -213,79 +219,224 @@ const ConfirmationModal = ({ isOpen, onClose, title, message, onConfirm, confirm
     );
 };
 
-// --- Subtopic List Component ---
+// --- AuthScreen Component ---
 
-const SubtopicInputList = ({ subtopics, setSubtopics, disabled }) => {
-    const nextSubtopicId = useRef(0);
+const AuthScreen = ({ setUserId }) => {
+    const [isLogin, setIsLogin] = useState(true);
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const [successMessage, setSuccessMessage] = useState('');
+    const [loading, setLoading] = useState(false);
 
-    useEffect(() => {
-        // Find the highest ID among existing subtopics or start from a high number
-        const maxId = subtopics.reduce((max, sub) => Math.max(max, sub.id || 0), 0);
-        nextSubtopicId.current = Math.max(maxId + 1, Date.now()); 
-    }, [subtopics]);
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        setSuccessMessage('');
+        setLoading(true);
 
-    const addSubtopic = () => {
-        const newId = nextSubtopicId.current++;
-        setSubtopics([...subtopics, { id: newId, name: '', number: '' }]);
-    };
-    
-    const updateSubtopic = (id, field, value) => {
-        setSubtopics(subtopics.map(sub => 
-            sub.id === id ? { ...sub, [field]: value } : sub
-        ));
-    };
-
-    const removeSubtopic = (id) => {
-        setSubtopics(subtopics.filter(sub => sub.id !== id));
+        try {
+            if (isLogin) {
+                const userCredential = await exponentialBackoff(() => signInWithEmailAndPassword(auth, email, password));
+                setUserId(userCredential.user.uid);
+            } else {
+                const userCredential = await exponentialBackoff(() => createUserWithEmailAndPassword(auth, email, password));
+                setUserId(userCredential.user.uid);
+            }
+        } catch (err) {
+            console.error(err);
+            const friendlyError = err.code ? err.code.replace('auth/', '').replace(/-/g, ' ') : 'An unknown error occurred.';
+            setError(`Error: ${friendlyError}`);
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
-        <div className="space-y-3 p-4 bg-gray-50 rounded-lg border">
-            <h4 className="text-base font-semibold text-gray-700">Subtopics / Problems (Optional)</h4>
-            
-            <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
-                {subtopics.map((sub) => (
-                    <div key={sub.id} className="flex items-center space-x-2 bg-white p-2 border rounded-lg shadow-sm">
-                        <input
-                            type="text"
-                            value={sub.name}
-                            onChange={(e) => updateSubtopic(sub.id, 'name', e.target.value)}
-                            placeholder="Subtopic Name / Problem Title"
-                            className="flex-3 p-2 border border-gray-200 rounded-lg text-sm w-full"
-                            disabled={disabled}
-                        />
-                        <input
-                            type="text"
-                            value={sub.number}
-                            onChange={(e) => updateSubtopic(sub.id, 'number', e.target.value)}
-                            placeholder="No."
-                            className="flex-1 w-1/4 p-2 border border-gray-200 rounded-lg text-sm text-center"
-                            disabled={disabled}
-                        />
-                        <button
-                            type="button" 
-                            onClick={(e) => { e.stopPropagation(); removeSubtopic(sub.id); }} 
-                            className="text-red-500 hover:text-red-700 disabled:opacity-50 flex-shrink-0"
-                            disabled={disabled}
-                        >
-                            <XCircle className="h-5 w-5" />
-                        </button>
-                    </div>
-                ))}
-            </div>
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+            <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-sm">
+                <h2 className="text-3xl font-bold text-gray-800 text-center mb-6">
+                    {isLogin ? 'Login' : 'Register'}
+                </h2>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <input
+                        type="email"
+                        placeholder="Email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        disabled={loading}
+                    />
+                    <input
+                        type="password"
+                        placeholder="Password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        disabled={loading}
+                    />
 
-            <Button 
-                type="button" 
-                onClick={(e) => { e.stopPropagation(); addSubtopic(); }} 
-                variant="secondary"
-                className="w-full justify-center text-blue-600 bg-blue-100 hover:bg-blue-200 disabled:opacity-50"
-                disabled={disabled}
-            >
-                <Plus className="h-4 w-4 mr-1" /> Add Problem/Subtopic
-            </Button>
+                    {error && (
+                        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg text-sm" role="alert">
+                            {error}
+                        </div>
+                    )}
+                    {successMessage && (
+                        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg text-sm" role="alert">
+                            {successMessage}
+                        </div>
+                    )}
+
+                    <Button type="submit" variant="primary" className="w-full" disabled={loading}>
+                        {loading ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}
+                    </Button>
+                </form>
+
+                <p className="mt-6 text-center text-sm">
+                    {isLogin ? "Don't have an account?" : "Already have an account?"}
+                    <button
+                        onClick={() => {
+                            setIsLogin(!isLogin);
+                            setError('');
+                            setSuccessMessage('');
+                            setEmail('');
+                            setPassword('');
+                        }}
+                        className="text-blue-600 hover:text-blue-800 font-semibold ml-1 transition-colors"
+                        disabled={loading}
+                    >
+                        {isLogin ? 'Register' : 'Login'}
+                    </button>
+                </p>
+            </div>
         </div>
     );
 };
+
+
+// --- Profile Components and Logic ---
+
+const ProfileModal = ({ userId, isOpen, onClose, userName, onSaveName }) => {
+    const [name, setName] = useState(userName || '');
+    const [isSavingName, setIsSavingName] = useState(false);
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [passwordError, setPasswordError] = useState('');
+    const [passwordSuccess, setPasswordSuccess] = useState('');
+    const [isChangingPassword, setIsChangingPassword] = useState(false);
+    
+    const currentUser = auth.currentUser;
+
+    const handleSaveName = async (e) => {
+        e.preventDefault();
+        if (!name.trim()) return;
+        setIsSavingName(true);
+        try {
+            await onSaveName(name.trim());
+        } finally {
+            setIsSavingName(false);
+        }
+    };
+
+    const handleChangePassword = async (e) => {
+        e.preventDefault();
+        setPasswordError('');
+        setPasswordSuccess('');
+        
+        if (password.length < 6) {
+            setPasswordError('Password must be at least 6 characters long.');
+            return;
+        }
+        if (password !== confirmPassword) {
+            setPasswordError('Passwords do not match.');
+            return;
+        }
+
+        setIsChangingPassword(true);
+        try {
+            await updatePassword(currentUser, password);
+            setPasswordSuccess('Password successfully updated!');
+            setPassword('');
+            setConfirmPassword('');
+        } catch (error) {
+            console.error('Password change failed:', error);
+            setPasswordError('Failed to change password. You may need to re-login.');
+        } finally {
+            setIsChangingPassword(false);
+        }
+    };
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="User Profile & Settings" size="sm:max-w-xl">
+            <div className="space-y-6">
+                {/* User Info */}
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <h4 className="font-bold text-lg text-blue-800 flex items-center"><User className="w-5 h-5 mr-2" /> Account Details</h4>
+                    <p className="text-sm text-gray-700 mt-2">Email: <span className="font-medium text-blue-700">{currentUser?.email || 'N/A'}</span></p>
+                    <p className="text-sm text-gray-700">User ID: <code className="text-xs text-blue-700">{userId}</code></p>
+                </div>
+
+                {/* Name Management */}
+                <div className="p-4 border rounded-lg">
+                    <h4 className="font-bold text-lg text-gray-800 flex items-center mb-3"><Edit className="w-5 h-5 mr-2" /> Change Display Name</h4>
+                    <form onSubmit={handleSaveName} className="flex space-x-3">
+                        <input
+                            type="text"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            placeholder="Your Display Name"
+                            required
+                            className="flex-grow p-2 border border-gray-300 rounded-lg"
+                            disabled={isSavingName}
+                        />
+                        <Button type="submit" variant="primary" disabled={isSavingName || name === userName}>
+                            {isSavingName ? 'Saving...' : 'Save Name'}
+                        </Button>
+                    </form>
+                </div>
+
+                {/* Password Change */}
+                <div className="p-4 border rounded-lg">
+                    <h4 className="font-bold text-lg text-gray-800 flex items-center mb-3"><Lock className="w-5 h-5 mr-2" /> Change Password</h4>
+                    <form onSubmit={handleChangePassword} className="space-y-3">
+                        <input
+                            type="password"
+                            placeholder="New Password (min 6 chars)"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            required
+                            className="w-full p-2 border border-gray-300 rounded-lg"
+                            disabled={isChangingPassword}
+                        />
+                        <input
+                            type="password"
+                            placeholder="Confirm New Password"
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
+                            required
+                            className="w-full p-2 border border-gray-300 rounded-lg"
+                            disabled={isChangingPassword}
+                        />
+                         {passwordError && (
+                            <div className="bg-red-100 text-red-700 p-2 rounded-lg text-sm">{passwordError}</div>
+                        )}
+                        {passwordSuccess && (
+                            <div className="bg-green-100 text-green-700 p-2 rounded-lg text-sm">{passwordSuccess}</div>
+                        )}
+                        <div className="flex justify-end">
+                            <Button type="submit" variant="danger" disabled={isChangingPassword || !password || !confirmPassword}>
+                                {isChangingPassword ? 'Updating...' : 'Change Password'}
+                            </Button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </Modal>
+    );
+};
+
 
 // --- Timer Component ---
 
@@ -360,7 +511,7 @@ const TimerModal = ({ isOpen, onClose }) => {
 
 // --- Recycle Bin Modal ---
 
-const RecycleBinModal = ({ userId, deletedTopics, isOpen, onClose, onRecover, onEmptyBin }) => {
+const RecycleBinModal = ({ deletedTopics, isOpen, onClose, onRecover, onEmptyBin }) => {
     const activeDeletedTopics = deletedTopics.filter(t => !t.isPermanentDelete);
 
     return (
@@ -406,11 +557,83 @@ const RecycleBinModal = ({ userId, deletedTopics, isOpen, onClose, onRecover, on
 
 // --- Forms and Logic (Add/Edit) ---
 
-const AddTopicForm = ({ userId, subjects, isOpen, onClose, onAddTopic }) => {
-    const [type, setType] = useState('revision'); // 'revision' or 'task'
+const SubtopicInputList = ({ subtopics, setSubtopics, disabled }) => {
+    const nextSubtopicId = useRef(0);
+
+    useEffect(() => {
+        const maxId = subtopics.reduce((max, sub) => Math.max(max, sub.id || 0), 0);
+        nextSubtopicId.current = Math.max(maxId + 1, Date.now()); 
+    }, [subtopics]);
+
+    const addSubtopic = () => {
+        const newId = nextSubtopicId.current++;
+        setSubtopics([...subtopics, { id: newId, name: '', number: '' }]);
+    };
+    
+    const updateSubtopic = (id, field, value) => {
+        setSubtopics(subtopics.map(sub => 
+            sub.id === id ? { ...sub, [field]: value } : sub
+        ));
+    };
+
+    const removeSubtopic = (id) => {
+        setSubtopics(subtopics.filter(sub => sub.id !== id));
+    };
+
+    return (
+        <div className="space-y-3 p-4 bg-gray-50 rounded-lg border">
+            <h4 className="text-base font-semibold text-gray-700">Subtopics / Problems (Optional)</h4>
+            
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
+                {subtopics.map((sub) => (
+                    <div key={sub.id} className="flex items-center space-x-2 bg-white p-2 border rounded-lg shadow-sm">
+                        <input
+                            type="text"
+                            value={sub.name}
+                            onChange={(e) => updateSubtopic(sub.id, 'name', e.target.value)}
+                            placeholder="Subtopic Name / Problem Title"
+                            className="flex-3 p-2 border border-gray-200 rounded-lg text-sm w-full"
+                            disabled={disabled}
+                        />
+                        <input
+                            type="text"
+                            value={sub.number}
+                            onChange={(e) => updateSubtopic(sub.id, 'number', e.target.value)}
+                            placeholder="No."
+                            className="flex-1 w-1/4 p-2 border border-gray-200 rounded-lg text-sm text-center"
+                            disabled={disabled}
+                        />
+                        <button
+                            type="button" 
+                            onClick={(e) => { e.stopPropagation(); removeSubtopic(sub.id); }} 
+                            className="text-red-500 hover:text-red-700 disabled:opacity-50 flex-shrink-0"
+                            disabled={disabled}
+                        >
+                            <XCircle className="h-5 w-5" />
+                        </button>
+                    </div>
+                ))}
+            </div>
+
+            <Button 
+                type="button" 
+                onClick={(e) => { e.stopPropagation(); addSubtopic(); }} 
+                variant="secondary"
+                className="w-full justify-center text-blue-600 bg-blue-100 hover:bg-blue-200 disabled:opacity-50"
+                disabled={disabled}
+            >
+                <Plus className="h-4 w-4 mr-1" /> Add Problem/Subtopic
+            </Button>
+        </div>
+    );
+};
+
+const AddTopicForm = ({ userId, subjects, isOpen, onClose, onAddTopic, defaultType = 'revision' }) => {
+    const [type, setType] = useState(defaultType); // 'revision' or 'task'
     const [topicName, setTopicName] = useState('');
     const [initialDate, setInitialDate] = useState(dateToISOString(TODAY_MS));
     const [taskDueDate, setTaskDueDate] = useState(dateToISOString(TODAY_MS));
+    const [taskSchedule, setTaskSchedule] = useState('specific'); // 'specific', 'tomorrow', 'recommended'
     const [selectedSubjectId, setSelectedSubjectId] = useState('');
     const [subtopics, setSubtopics] = useState([]); 
     const [enableLtr, setEnableLtr] = useState(false); // Long-Term Review
@@ -434,13 +657,25 @@ const AddTopicForm = ({ userId, subjects, isOpen, onClose, onAddTopic }) => {
             .filter(sub => sub.name.trim() !== '')
             .map(sub => ({ name: sub.name.trim(), number: sub.number.trim() }));
         
+        // Calculate task due date based on schedule option
+        let finalTaskDueDate = null;
+        if (type === 'task') {
+            if (taskSchedule === 'specific') {
+                finalTaskDueDate = taskDueDate ? new Date(taskDueDate).getTime() : null;
+            } else if (taskSchedule === 'tomorrow') {
+                finalTaskDueDate = TOMORROW_MS;
+            } else if (taskSchedule === 'today') {
+                finalTaskDueDate = TODAY_MS;
+            }
+        }
+
         try {
             await onAddTopic({
                 type,
                 name: topicName.trim(),
                 subjectId: selectedSubjectId,
-                initialStudyDate: studyDate.getTime(),
-                taskDueDate: type === 'task' && taskDueDate ? new Date(taskDueDate).getTime() : null,
+                initialStudyDate: isRevision ? studyDate.getTime() : null, // Only store for revision
+                taskDueDate: finalTaskDueDate,
                 subtopics: cleanedSubtopics,
                 enableLtr: type === 'revision' ? enableLtr : false
             });
@@ -459,6 +694,7 @@ const AddTopicForm = ({ userId, subjects, isOpen, onClose, onAddTopic }) => {
     };
 
     const isRevision = type === 'revision';
+    const hasSubjects = subjects.length > 0;
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Add New Study Item">
@@ -483,6 +719,7 @@ const AddTopicForm = ({ userId, subjects, isOpen, onClose, onAddTopic }) => {
                     </Button>
                 </div>
 
+                {/* Main Topic/Task Name */}
                 <input
                     type="text"
                     value={topicName}
@@ -493,15 +730,16 @@ const AddTopicForm = ({ userId, subjects, isOpen, onClose, onAddTopic }) => {
                     disabled={loading}
                 />
                 
+                {/* Subject Selector and Date/Schedule Input */}
                 <div className="flex flex-col sm:flex-row sm:space-x-4 space-y-4 sm:space-y-0 mb-4">
                     <select
                         value={selectedSubjectId}
                         onChange={(e) => setSelectedSubjectId(e.target.value)}
                         required
                         className="flex-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                        disabled={loading || subjects.length === 0}
+                        disabled={loading || !hasSubjects}
                     >
-                        {subjects.length === 0 && <option value="">No Subjects Added</option>}
+                        {!hasSubjects && <option value="">No Subjects Added</option>}
                         {subjects.map(subject => (
                             <option key={subject.id} value={subject.id}>{subject.name}</option>
                         ))}
@@ -518,14 +756,33 @@ const AddTopicForm = ({ userId, subjects, isOpen, onClose, onAddTopic }) => {
                             disabled={loading}
                         />
                     ) : (
-                         <input
-                            type="date"
-                            value={taskDueDate}
-                            onChange={(e) => setTaskDueDate(e.target.value)}
-                            title="Optional Due Date for this task"
-                            className="w-full sm:w-1/2 p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                            disabled={loading}
-                        />
+                        <div className="w-full sm:w-1/2 space-y-2">
+                             <select
+                                value={taskSchedule}
+                                onChange={(e) => { setTaskSchedule(e.target.value); if (e.target.value !== 'specific') setTaskDueDate(dateToISOString(TODAY_MS)); }}
+                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                disabled={loading}
+                            >
+                                <option value="today">Schedule Today</option>
+                                <option value="tomorrow">Schedule Tomorrow</option>
+                                <option value="specific">Schedule Specific Date</option>
+                                <option value="recommended">Add to Recommended List</option>
+                            </select>
+                            {taskSchedule === 'specific' && (
+                                <input
+                                    type="date"
+                                    value={taskDueDate}
+                                    onChange={(e) => setTaskDueDate(e.target.value)}
+                                    required
+                                    title="Specific Due Date"
+                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                    disabled={loading}
+                                />
+                            )}
+                            {taskSchedule === 'recommended' && (
+                                <p className="text-xs text-gray-500 p-1">No due date. Appears in "Recommended" tab.</p>
+                            )}
+                        </div>
                     )}
                 </div>
 
@@ -599,7 +856,7 @@ const EditTopicModal = ({ userId, topic, subjects, isOpen, onClose, onSave }) =>
             .map(sub => ({ name: sub.name.trim(), number: sub.number.trim() }));
         
         try {
-            await onSave(topic.id, topicName.trim(), selectedSubjectId, initialDate, cleanedSubtopics, enableLtr);
+            await onSave(topic.id, topicName.trim(), selectedSubjectId, initialDate, cleanedSubtopics, enableLtr, taskDueDate);
             onClose();
         } catch (error) {
             console.error('Error saving edited topic:', error);
@@ -868,11 +1125,16 @@ const CalendarView = ({ topics, allSubjects }) => {
 
 // --- App Logic Component ---
 
-const AppLogic = ({ userId, topics, subjects, allSubjects }) => {
-    const [activeTab, setActiveTab] = useState('dashboard');
+const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
+    const [activeSection, setActiveSection] = useState('revision'); // 'revision' or 'tasks' or 'reports'
+    const [activeRevisionTab, setActiveRevisionTab] = useState('dashboard');
+    const [activeTaskTab, setActiveTaskTab] = useState('today');
+
     const [isAddTopicModalOpen, setIsAddTopicModalOpen] = useState(false);
     const [isAddSubjectModalOpen, setIsAddSubjectModalOpen] = useState(false);
     const [isRecycleBinOpen, setIsRecycleBinOpen] = useState(false);
+    const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
     const [topicToEdit, setTopicToEdit] = useState(null); 
     const [isEditTopicModalOpen, setIsEditTopicModalOpen] = useState(false); 
     const [isTimerModalOpen, setIsTimerModalOpen] = useState(false); // Timer Modal State
@@ -887,10 +1149,42 @@ const AppLogic = ({ userId, topics, subjects, allSubjects }) => {
 
     const [selectedSubjectFilter, setSelectedSubjectFilter] = useState('all');
 
-    // --- Data Manipulation Helpers (Moved to AppLogic for access to state) ---
+    // --- Profile State ---
+    const [userName, setUserName] = useState('');
+
+    // Fetch User Name on component load
+    useEffect(() => {
+        if (userId) {
+            const userDocRef = getUserDocRef(userId);
+            const unsubscribe = onSnapshot(userDocRef, (docSnap) => {
+                if (docSnap.exists() && docSnap.data().name) {
+                    setUserName(docSnap.data().name);
+                } else {
+                    setUserName(auth.currentUser?.email.split('@')[0] || 'User');
+                }
+            }, (error) => {
+                console.error("Error fetching user profile:", error);
+                setUserName(auth.currentUser?.email.split('@')[0] || 'User');
+            });
+            return () => unsubscribe();
+        }
+    }, [userId]);
+
+    const handleSaveName = useCallback(async (name) => {
+        if (!userId) return;
+        const userDocRef = getUserDocRef(userId);
+        try {
+            await exponentialBackoff(() => setDoc(userDocRef, { name: name }, { merge: true }));
+            setUserName(name);
+        } catch (error) {
+            console.error("Error saving user name:", error);
+        }
+    }, [userId]);
+
+    // --- Data Manipulation Helpers (Defined inside AppLogic) ---
     
     // Core logic for adding a new subject
-    const AddSubjectForm = ({ userId, onClose }) => {
+    const AddSubjectForm = ({ userId, onClose, subjectCollectionGetter }) => {
         const [name, setName] = useState('');
         const [loading, setLoading] = useState(false);
     
@@ -900,7 +1194,7 @@ const AppLogic = ({ userId, topics, subjects, allSubjects }) => {
     
             setLoading(true);
             try {
-                const subjectDocRef = doc(getSubjectsCollection(userId));
+                const subjectDocRef = doc(subjectCollectionGetter(userId));
                 await exponentialBackoff(() => setDoc(subjectDocRef, {
                     name: name.trim(),
                     createdAt: Date.now(),
@@ -921,7 +1215,7 @@ const AppLogic = ({ userId, topics, subjects, allSubjects }) => {
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Subject Name (e.g., Organic Chemistry)"
+                    placeholder="Subject Name (e.g., Data Structures, Math)"
                     required
                     className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 mb-4"
                     disabled={loading}
@@ -950,6 +1244,7 @@ const AppLogic = ({ userId, topics, subjects, allSubjects }) => {
                 deleted: false,
                 deletedAt: null,
                 createdAt: Date.now(),
+                isComplete: false, // Default for tasks
             };
 
             await exponentialBackoff(() => setDoc(topicDocRef, topicData));
@@ -959,7 +1254,7 @@ const AppLogic = ({ userId, topics, subjects, allSubjects }) => {
         }
     }, [userId]);
 
-    // CORE FUNCTION: Marks the revision/task as complete
+    // CORE FUNCTION: Marks the revision/task as complete (FIX: Added task completion logic)
     const handleMarkDone = useCallback(async (topic) => {
         if (!userId || !topic || !topic.id) { 
             console.error("Attempted to mark done with invalid topic or ID.");
@@ -973,7 +1268,7 @@ const AppLogic = ({ userId, topics, subjects, allSubjects }) => {
                 const batch = writeBatch(db);
 
                 if (topic.type === 'task') {
-                    // Mark Todo/Task as permanently done
+                    // FIX: Set isComplete to true for tasks
                     batch.update(topicRef, { isComplete: true, completedDate: Date.now() });
                 } else {
                     // Revision Topic Logic
@@ -1104,48 +1399,8 @@ const AppLogic = ({ userId, topics, subjects, allSubjects }) => {
     }, [userId]);
 
 
-    // --- Handlers for Modals/Actions ---
-
-    const handleOpenEditModal = useCallback((topic) => {
-        setTopicToEdit(topic);
-        setIsEditTopicModalOpen(true);
-    }, []);
-
-    const handleDeleteClick = useCallback((topicId) => {
-        setConfirmAction({
-            isOpen: true,
-            title: 'Move to Recycle Bin',
-            message: 'Are you sure you want to move this item to the Recycle Bin? You can recover it within 60 days.',
-            onConfirm: () => handleSoftDelete(topicId),
-            confirmText: 'Move to Bin'
-        });
-    }, [handleSoftDelete]);
-
-
-    const handleMarkDoneClick = useCallback((topic) => {
-        // Todo item: Mark as complete
-        if (topic.type === 'task') {
-             setConfirmAction({
-                isOpen: true,
-                title: 'Confirm Task Completion',
-                message: `Mark "${topic.name}" as complete? It will be removed from your active lists.`,
-                onConfirm: () => handleMarkDone(topic),
-                confirmText: 'Mark Complete'
-            });
-        } else {
-            // Revision item: Mark current step done
-             setConfirmAction({
-                isOpen: true,
-                title: 'Confirm Revision',
-                message: `Are you sure you want to mark "${topic.name}" as DONE for this revision?`,
-                onConfirm: () => handleMarkDone(topic),
-                confirmText: 'Mark Done'
-            });
-        }
-    }, [handleMarkDone]);
-    
     // Handle Editing Topic Details 
-    const handleEditTopic = useCallback(async (topicId, name, subjectId, initialDateString, subtopics, enableLtr) => {
+    const handleEditTopic = useCallback(async (topicId, name, subjectId, initialDateString, subtopics, enableLtr, taskDueDateString) => {
         if (!userId || !topicId) return; 
         
         const topicRef = doc(getTopicsCollection(userId), topicId);
@@ -1160,17 +1415,22 @@ const AppLogic = ({ userId, topics, subjects, allSubjects }) => {
             name: name,
             subjectId: subjectId,
             subtopics: subtopics,
-            enableLtr: existingTopic.type === 'revision' ? enableLtr : false,
         };
+        
+        if (existingTopic.type === 'revision') {
+            updateData.enableLtr = enableLtr;
 
-        // If initial study date has changed, or LTR state changed for a revision topic, recalculate schedule
-        const dateChanged = newStudyDateMs !== originalStudyDateMs;
-        const ltrChanged = existingTopic.enableLtr !== enableLtr;
+            // If initial study date has changed, or LTR state changed for a revision topic, recalculate schedule
+            const dateChanged = newStudyDateMs !== originalStudyDateMs;
+            const ltrChanged = existingTopic.enableLtr !== enableLtr;
 
-        if (existingTopic.type === 'revision' && (dateChanged || ltrChanged)) {
-            updateData.initialStudyDate = newStudyDateMs;
-            // Generate a *new* full schedule based on the new start date and LTR setting
-            updateData.schedule = generateSchedule(newStudyDate, enableLtr);
+            if (dateChanged || ltrChanged) {
+                updateData.initialStudyDate = newStudyDateMs;
+                // Generate a *new* full schedule based on the new start date and LTR setting
+                updateData.schedule = generateSchedule(newStudyDate, enableLtr);
+            }
+        } else if (existingTopic.type === 'task') {
+            updateData.taskDueDate = taskDueDateString ? new Date(taskDueDateString).getTime() : null;
         }
 
         try {
@@ -1185,11 +1445,10 @@ const AppLogic = ({ userId, topics, subjects, allSubjects }) => {
     // --- Data Processing (Core Logic) ---
 
     const processedTopics = useMemo(() => {
-        const todayMs = TODAY_MS;
         const tomorrowMs = TODAY_MS + (1000 * 60 * 60 * 24);
 
         return topics.filter(t => !t.deleted).map(topic => {
-            // Defensive default for older topics lacking a 'type' field
+            // FIX: Defensive default for older topics lacking a 'type' field
             const type = topic.type || 'revision'; 
             
             const completedCount = topic.schedule?.filter(s => s.completed)?.length || 0;
@@ -1202,10 +1461,7 @@ const AppLogic = ({ userId, topics, subjects, allSubjects }) => {
                 if (ltrRevision) {
                     let nextLtrDateMs = ltrRevision.targetDate;
 
-                    // If LTR is due/missed, we don't recalculate unless marked done.
-                    // If targetDate is Infinity (first time reaching completion), calculate it now.
                     if (nextLtrDateMs === Infinity) {
-                         // Find the last actual completion date or use initial study date
                         const lastCompletedItem = [...topic.schedule]
                             .filter(s => s.completed)
                             .sort((a, b) => b.completedDate - a.completedDate)[0];
@@ -1224,26 +1480,27 @@ const AppLogic = ({ userId, topics, subjects, allSubjects }) => {
             }
 
 
-            const isComplete = !nextRevision && type === 'revision';
+            const isComplete = (topic.type === 'task' && topic.isComplete) || (!nextRevision && topic.type === 'revision'); 
             
             let isPending = false;
             let isMissed = false;
             let isTaskPending = false; 
 
             if (type === 'revision' && nextRevision) {
-                isPending = nextRevision.targetDate <= todayMs;
-                isMissed = nextRevision.targetDate < todayMs;
+                isPending = nextRevision.targetDate <= TODAY_MS;
+                isMissed = nextRevision.targetDate < TODAY_MS;
             } else if (type === 'task' && topic.taskDueDate && !topic.isComplete) {
-                // Task is pending if due today or tomorrow
-                isTaskPending = topic.taskDueDate <= tomorrowMs;
+                // Task is pending if due today or earlier OR due tomorrow (for today/tomorrow view)
+                isTaskPending = topic.taskDueDate <= TOMORROW_MS;
                 isPending = isTaskPending; // Use task pending for general pending categorization
+                isMissed = topic.taskDueDate < TODAY_MS;
             }
             
             const isDone = completedCount > 0;
 
             return {
                 ...topic,
-                type, // Use the derived type
+                type,
                 completedCount,
                 nextRevision,
                 isComplete,
@@ -1255,119 +1512,88 @@ const AppLogic = ({ userId, topics, subjects, allSubjects }) => {
             };
         });
     }, [topics, allSubjects]);
+    
+    // --- Topic Filtering ---
 
-    const filteredTopics = useMemo(() => {
-        let list = processedTopics;
-
-        if (selectedSubjectFilter !== 'all') {
-            list = list.filter(t => t.subjectId === selectedSubjectFilter);
-        }
-
-        switch (activeTab) {
-            case 'pending':
-                // Pending: Revision topics due today/future (but not missed), AND tasks due today/tomorrow
-                list = list.filter(t => 
-                    (t.type === 'revision' && t.isPending && !t.isMissed) || 
-                    (t.type === 'task' && t.isTaskPending)
-                );
-                break;
-            case 'missed':
-                // Missed: ONLY Revision topics that are strictly overdue
-                list = list.filter(t => t.type === 'revision' && t.isMissed);
-                break;
-            case 'done':
-                // Done tab includes all revision topics that have completed at least one revision AND are not fully complete
-                list = list.filter(t => t.type === 'revision' && t.isDone && !t.isComplete);
-                break;
-            case 'tasks':
-                // Tasks: ONLY Todo items that are not yet complete
-                list = list.filter(t => t.type === 'task' && !t.isComplete);
-                break;
-            case 'dashboard':
-            default:
-                // Dashboard shows all active topics (both revision and task)
-                break;
-        }
-
-        // Default sorting: Missed > Due Today/Pending > Soonest Next Date/Due Date > Completed
-        return list.sort((a, b) => {
-             // 1. Missed/Overdue Revisions First
-            if (a.isMissed !== b.isMissed) {
-                return a.isMissed ? -1 : 1;
-            }
-
-            // 2. Pending Revisions/Tasks Due Soon (Today/Tomorrow)
-            if (a.isPending !== b.isPending) {
-                return a.isPending ? -1 : 1;
-            }
-            
-            // 3. Sort by Next Date (Only for items with a date)
-            const aDate = a.type === 'revision' ? a.nextRevision?.targetDate || Infinity : a.taskDueDate || Infinity;
-            const bDate = b.type === 'revision' ? b.nextRevision?.targetDate || Infinity : b.taskDueDate || Infinity;
-            return aDate - bDate;
-        });
-    }, [processedTopics, activeTab, selectedSubjectFilter]);
-
-    const deletedTopics = useMemo(() => {
-        // Filter out permanently deleted items (60 days old)
-        const sixtyDaysAgo = Date.now() - (60 * 24 * 60 * 60 * 1000);
-        
-        return topics.filter(t => t.deleted).map(t => ({
-            ...t,
-            isPermanentDelete: t.deletedAt < sixtyDaysAgo
-        }));
-
-    }, [topics]);
+    const getRevisionTopics = useMemo(() => processedTopics.filter(t => t.type === 'revision'), [processedTopics]);
+    const getTaskTopics = useMemo(() => processedTopics.filter(t => t.type === 'task'), [processedTopics]);
 
     // --- Tab Counts ---
-    const tabCounts = useMemo(() => ({
-        pending: processedTopics.filter(t => (t.type === 'revision' && t.isPending && !t.isMissed) || (t.type === 'task' && t.isTaskPending)).length,
-        missed: processedTopics.filter(t => t.type === 'revision' && t.isMissed).length,
-        done: processedTopics.filter(t => t.type === 'revision' && t.isDone && !t.isComplete).length,
-        tasks: processedTopics.filter(t => t.type === 'task' && !t.isComplete).length,
-    }), [processedTopics]);
+    const revisionTabCounts = useMemo(() => ({
+        pending: getRevisionTopics.filter(t => t.isPending && !t.isMissed).length,
+        missed: getRevisionTopics.filter(t => t.isMissed).length,
+        done: getRevisionTopics.filter(t => t.isDone && !t.isComplete).length,
+    }), [getRevisionTopics]);
 
-    const tabClasses = (tab) => (
+    const taskTabCounts = useMemo(() => {
+        const allTasks = getTaskTopics;
+        const activeTasks = allTasks.filter(t => !t.isComplete);
+
+        const todayTasks = allTasks.filter(t => t.taskDueDate && t.taskDueDate <= TODAY_MS);
+        const tomorrowTasks = allTasks.filter(t => t.taskDueDate && t.taskDueDate === TOMORROW_MS);
+        
+        return {
+            today: activeTasks.filter(t => t.taskDueDate && t.taskDueDate <= TODAY_MS).length,
+            tomorrow: activeTasks.filter(t => t.taskDueDate && t.taskDueDate === TOMORROW_MS).length,
+            upcoming: activeTasks.filter(t => t.taskDueDate && t.taskDueDate > TOMORROW_MS).length,
+            recommended: activeTasks.filter(t => !t.taskDueDate).length,
+            totalActive: activeTasks.length,
+            totalCompleted: allTasks.filter(t => t.isComplete).length,
+            total: allTasks.length,
+            
+            // Item 2: Task Progress Metrics
+            todayTotal: allTasks.filter(t => t.taskDueDate && t.taskDueDate <= TODAY_MS).length,
+            todayCompleted: allTasks.filter(t => t.taskDueDate && t.taskDueDate <= TODAY_MS && t.isComplete).length,
+            
+            weeklyTotal: allTasks.filter(t => t.taskDueDate && t.taskDueDate >= START_OF_WEEK_MS && t.taskDueDate <= END_OF_WEEK_MS).length,
+            weeklyCompleted: allTasks.filter(t => t.taskDueDate && t.taskDueDate >= START_OF_WEEK_MS && t.taskDueDate <= END_OF_WEEK_MS && t.isComplete).length,
+        }
+    }, [getTaskTopics]);
+    
+    // --- Centralized Handlers for Confirmation Modals ---
+    const handleMarkDoneClick = useCallback((topic) => {
+        // Pass the full topic object to avoid lookup race condition
+        setConfirmAction({
+            isOpen: true,
+            title: 'Confirm Completion',
+            message: `Are you sure you want to mark "${topic.name}" as DONE?`,
+            onConfirm: () => handleMarkDone(topic),
+            confirmText: 'Mark Done'
+        });
+    }, [handleMarkDone]);
+
+    const handleDeleteClick = useCallback((topicId) => {
+        setConfirmAction({
+            isOpen: true,
+            title: 'Confirm Deletion',
+            message: 'Are you sure you want to delete this item? It will be moved to the Recycle Bin.',
+            onConfirm: () => handleSoftDelete(topicId),
+            confirmText: 'Move to Bin'
+        });
+    }, [handleSoftDelete]);
+    
+    const handleOpenEditModal = useCallback((topic) => {
+        setTopicToEdit(topic);
+        setIsEditTopicModalOpen(true);
+    }, []);
+
+
+    // --- UI Helpers ---
+
+    const tabClasses = (tab, currentActive) => (
         `flex-1 text-center py-2 font-semibold transition-colors rounded-t-lg text-xs sm:text-sm 
-        ${activeTab === tab ? 'bg-white shadow-inner text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-blue-500'}`
+        ${currentActive === tab ? 'bg-white shadow-inner text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-blue-500'}`
     );
 
-    // --- Timer Logic Component (Moved here for access to global state, though it relies on localStorage) ---
-    const TimerLogic = () => {
-        const [isModalOpen, setIsModalOpen] = useState(false);
-        return (
-            <>
-                <Button 
-                    variant="outline" 
-                    onClick={() => setIsModalOpen(true)}
-                    className="flex items-center text-xs sm:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5"
-                >
-                    <Clock className="w-4 h-4 mr-1"/> Timer
-                </Button>
-                <TimerModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
-            </>
-        );
-    };
-
-    // --- User Info Helper Component ---
-    const UserInfo = () => {
-        const truncatedId = userId ? `${userId.substring(0, 4)}...${userId.substring(userId.length - 4)}` : 'N/A';
-        return (
-            <div className="flex items-center text-xs sm:text-sm text-gray-500 bg-gray-100 p-2 rounded-lg shadow-inner flex-shrink-0">
-                <Users className="h-4 w-4 mr-1 text-blue-500" />
-                <span className="hidden sm:inline font-semibold text-gray-700">User ID:</span>
-                <code className="ml-1 text-blue-600 font-mono text-xs">{truncatedId}</code>
-            </div>
-        );
-    };
-    
-    // --- Topic Card Component (Moved inside AppLogic) ---
+    // --- Topic Card Component ---
     
     const TopicCard = ({ topic, subjectName, onMarkDone, onShift, onDelete, onEdit }) => {
         const totalRevisions = REVISION_SCHEDULE.length;
         const completedRevisions = topic.schedule?.filter(s => s.completed && !s.isLongTerm)?.length || 0;
         const currentRevision = topic.schedule?.find(s => !s.completed) || null;
-        const isComplete = !currentRevision && topic.type === 'revision';
+        
+        // Final completion check: either fully revised (isComplete) OR task is marked complete (topic.isComplete)
+        const isComplete = topic.type === 'task' ? topic.isComplete : (!currentRevision && topic.type === 'revision'); 
         
         const statusText = getStatusText(currentRevision, totalRevisions, topic.type);
         const isMissed = statusText.startsWith('Missed');
@@ -1407,8 +1633,9 @@ const AppLogic = ({ userId, topics, subjects, allSubjects }) => {
         // Task Specific Styling
         else if (topic.type === 'task') {
             typeBadge = 'Study Task';
-            cardBorder = 'border-purple-400';
-            if (topic.isTaskPending) {
+            cardBorder = topic.isComplete ? 'border-green-400' : 'border-purple-400';
+            statusColor = topic.isComplete ? 'text-green-600' : 'text-gray-600';
+            if (!topic.isComplete && topic.isTaskPending) {
                 cardBorder = 'border-orange-500 ring-2 ring-orange-100';
                 statusColor = 'text-orange-600';
             }
@@ -1432,15 +1659,15 @@ const AppLogic = ({ userId, topics, subjects, allSubjects }) => {
                         </p>
                     </div>
                     <div className={`text-right text-sm font-semibold ${statusColor}`}>
-                        {statusText}
-                        {topic.type === 'revision' && (
+                        {topic.type === 'task' && topic.isComplete ? 'Completed' : statusText}
+                        {topic.type === 'revision' && !topic.isComplete && (
                             <div className="text-xs text-gray-500 mt-1">
                                 Rev: {completedRevisions}/{totalRevisions}
                             </div>
                         )}
-                        {topic.type === 'task' && topic.taskDueDate && (
+                        {topic.type === 'task' && nextDate && !topic.isComplete && (
                              <div className="text-xs text-gray-500 mt-1">
-                                 Due: {dateToString(topic.taskDueDate)}
+                                 Due: {dateToString(nextDate)}
                              </div>
                         )}
                     </div>
@@ -1505,20 +1732,675 @@ const AppLogic = ({ userId, topics, subjects, allSubjects }) => {
         );
     };
 
+    // --- Rendering Sections ---
+    
+    const RevisionSection = ({handleMarkDoneClick, handleShift, handleDeleteClick, handleOpenEditModal}) => {
+        const revisionTopics = getRevisionTopics;
+        let list = revisionTopics;
+
+        const currentSubjects = subjects.filter(s => s.type === 'revision');
+
+        if (selectedSubjectFilter !== 'all') {
+            list = list.filter(t => t.subjectId === selectedSubjectFilter);
+        }
+
+        switch (activeRevisionTab) {
+            case 'pending':
+                list = list.filter(t => t.isPending && !t.isMissed);
+                break;
+            case 'missed':
+                list = list.filter(t => t.isMissed);
+                break;
+            case 'done':
+                list = list.filter(t => t.isDone && !t.isComplete);
+                break;
+            case 'calendar':
+                // Note: The CalendarView now receives *only* revision topics
+                return <CalendarView topics={revisionTopics} allSubjects={allSubjects} />; 
+            case 'dashboard':
+            default:
+                break;
+        }
+
+        return (
+            <>
+                {/* Subject Filter (Specific to Revision Section) */}
+                <div className="bg-white p-4 rounded-xl shadow-lg mb-6">
+                    <h3 className="text-lg font-semibold text-gray-700 mb-3">Filter Subjects:</h3>
+                    <div className="flex flex-wrap gap-2">
+                        <Button
+                            variant={selectedSubjectFilter === 'all' ? 'primary' : 'secondary'}
+                            onClick={() => setSelectedSubjectFilter('all')}
+                            className="text-sm px-3 py-1.5"
+                        >
+                            All
+                        </Button>
+                        {currentSubjects.map(subject => (
+                            <Button
+                                key={subject.id}
+                                variant={selectedSubjectFilter === subject.id ? 'info' : 'secondary'}
+                                onClick={() => setSelectedSubjectFilter(subject.id)}
+                                className="text-sm px-3 py-1.5"
+                            >
+                                {subject.name}
+                            </Button>
+                        ))}
+                        {selectedSubjectFilter !== 'all' && (
+                            <Button
+                                variant="secondary"
+                                onClick={() => setSelectedSubjectFilter('all')}
+                                className="text-sm px-3 py-1.5 text-red-600 hover:bg-red-100 bg-red-50 border border-red-200"
+                            >
+                                Clear Filter
+                            </Button>
+                        )}
+                    </div>
+                </div>
+
+                <div className="flex border-b border-gray-200 mb-6 sticky top-[170px] sm:top-[80px] bg-gray-50">
+                    <button onClick={() => setActiveRevisionTab('dashboard')} className={tabClasses('dashboard', activeRevisionTab)}>
+                        <LayoutDashboard className="w-4 h-4 mx-auto mb-1" /> Dashboard
+                    </button>
+                    <button onClick={() => setActiveRevisionTab('pending')} className={tabClasses('pending', activeRevisionTab)}>
+                        <Clock className="w-4 h-4 mx-auto mb-1" /> Pending ({revisionTabCounts.pending})
+                    </button>
+                    <button onClick={() => setActiveRevisionTab('missed')} className={tabClasses('missed', activeRevisionTab)}>
+                        <XCircle className="w-4 h-4 mx-auto mb-1" /> Missed ({revisionTabCounts.missed})
+                    </button>
+                    <button onClick={() => setActiveRevisionTab('done')} className={tabClasses('done', activeRevisionTab)}>
+                        <CheckCircle className="w-4 h-4 mx-auto mb-1" /> Done ({revisionTabCounts.done})
+                    </button>
+                    <button onClick={() => setActiveRevisionTab('calendar')} className={tabClasses('calendar', activeRevisionTab)}>
+                        <Calendar className="w-4 h-4 mx-auto mb-1" /> Calendar
+                    </button>
+                </div>
+                
+                {activeRevisionTab !== 'calendar' && (
+                    <div className="grid md:grid-cols-2 gap-6">
+                        {list.length > 0 ? (
+                            list.map(topic => (
+                                <TopicCard
+                                    key={topic.id}
+                                    topic={topic}
+                                    subjectName={topic.subjectName}
+                                    onMarkDone={handleMarkDoneClick}
+                                    onShift={handleShift}
+                                    onDelete={handleDeleteClick}
+                                    onEdit={handleOpenEditModal}
+                                />
+                            ))
+                        ) : (
+                            <div className="col-span-2 bg-white p-8 rounded-xl shadow-lg text-center text-gray-500">
+                                <h3 className="text-2xl font-semibold mb-2">No Revision Topics Here</h3>
+                                <p>Add a new item or clear your filter.</p>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </>
+        );
+    };
+    
+    // --- New Task Section Component ---
+    const TaskSection = ({handleMarkDoneClick, handleDeleteClick, handleOpenEditModal}) => {
+        const allTasks = getTaskTopics;
+        const activeTasks = allTasks.filter(t => !t.isComplete);
+        const completedTasks = allTasks.filter(t => t.isComplete);
+        const currentSubjects = subjects.filter(s => s.type === 'task');
+
+        let list = activeTasks;
+        
+        // Apply subject filter if active
+        if (selectedSubjectFilter !== 'all') {
+            list = list.filter(t => t.subjectId === selectedSubjectFilter);
+        }
+
+        const filteredList = useMemo(() => {
+            switch (activeTaskTab) {
+                case 'today':
+                    // Today or earlier (Overdue)
+                    return list.filter(t => t.taskDueDate && t.taskDueDate <= TODAY_MS)
+                               .sort((a, b) => (a.taskDueDate || Infinity) - (b.taskDueDate || Infinity));
+                case 'tomorrow':
+                    // Exactly tomorrow
+                    return list.filter(t => t.taskDueDate && t.taskDueDate === TOMORROW_MS);
+                case 'upcoming':
+                    // After tomorrow, but scheduled
+                    return list.filter(t => t.taskDueDate && t.taskDueDate > TOMORROW_MS);
+                case 'recommended':
+                    // No date assigned
+                    return list.filter(t => !t.taskDueDate);
+                case 'completed':
+                    return completedTasks.filter(t => selectedSubjectFilter === 'all' || t.subjectId === selectedSubjectFilter);
+                default:
+                    return list;
+            }
+        }, [list, activeTaskTab, completedTasks, selectedSubjectFilter]);
+        
+        // --- Completed Tasks View (Item 2) ---
+        const CompletedTasksView = useMemo(() => {
+            // Group completed tasks by completion date (or due date if completion date is missing)
+            const tasksToGroup = filteredList.filter(t => t.isComplete);
+
+            const groupedTasks = new Map();
+            tasksToGroup.forEach(task => {
+                const dateMs = task.completedDate || task.taskDueDate || TODAY_MS;
+                const dateKey = dateToISOString(dateMs);
+                
+                if (!groupedTasks.has(dateKey)) {
+                    groupedTasks.set(dateKey, { date: dateToString(dateMs), tasks: [] });
+                }
+                groupedTasks.get(dateKey).tasks.push(task);
+            });
+
+            // Convert Map to array and sort by date descending
+            return Array.from(groupedTasks.values()).sort((a, b) => new Date(b.date) - new Date(a.date));
+        }, [filteredList]);
+
+        
+        const todayTasks = getTaskTopics.filter(t => t.taskDueDate && t.taskDueDate <= TODAY_MS);
+        const todayTotal = todayTasks.length;
+        const todayCompleted = todayTasks.filter(t => t.isComplete).length;
+        const todayCompletionRate = todayTotal > 0 ? (todayCompleted / todayTotal) * 100 : 0;
+
+        const weeklyTasks = getTaskTopics.filter(t => t.taskDueDate && t.taskDueDate >= START_OF_WEEK_MS && t.taskDueDate <= END_OF_WEEK_MS);
+        const weeklyTotal = weeklyTasks.length;
+        const weeklyCompleted = weeklyTasks.filter(t => t.isComplete).length;
+        const weeklyCompletionRate = weeklyTotal > 0 ? (weeklyCompleted / weeklyTotal) * 100 : 0;
+
+
+        const SectionTitle = ({ dateMs, fallbackText }) => {
+            if (activeTaskTab === 'recommended') {
+                return <h3 className="text-xl font-bold text-gray-800 mb-4">{fallbackText}</h3>
+            }
+            if (dateMs === TODAY_MS) {
+                return <h3 className="text-xl font-bold text-gray-800 mb-4">Today's Tasks & Overdue</h3>;
+            }
+            if (dateMs === TOMORROW_MS) {
+                return <h3 className="text-xl font-bold text-gray-800 mb-4">Tomorrow's Tasks</h3>;
+            }
+            return <h3 className="text-xl font-bold text-gray-800 mb-4">{fallbackText}</h3>;
+        };
+
+
+        return (
+            <>
+                {/* Task Progress Summary */}
+                <div className="bg-white p-4 rounded-xl shadow-lg mb-6 border-b-4 border-blue-600">
+                    <div className="mb-4">
+                        <h3 className="text-2xl font-bold text-gray-800">Study Task Summary</h3>
+                        <p className="text-sm text-gray-500 mt-1">Overall Completion: {taskTabCounts.totalCompleted} / {taskTabCounts.total} ({Math.round(taskTabCounts.completionRate)}%)</p>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                        {/* Today's Stats */}
+                        <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                            <p className="text-sm font-semibold text-blue-800">Today's Due Tasks</p>
+                            <h4 className="text-3xl font-bold text-gray-800 mt-1">{todayCompleted} / {todayTotal}</h4>
+                            <p className="text-xs text-gray-600 mt-1">Today's Rate: {Math.round(todayCompletionRate)}%</p>
+                        </div>
+                        {/* Weekly Stats */}
+                         <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                            <p className="text-sm font-semibold text-purple-800">This Week's Tasks</p>
+                            <h4 className="text-3xl font-bold text-gray-800 mt-1">{weeklyCompleted} / {weeklyTotal}</h4>
+                            <p className="text-xs text-gray-600 mt-1">Weekly Rate: {Math.round(weeklyCompletionRate)}%</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Subject Filter (Specific to Task Section) */}
+                 <div className="bg-white p-4 rounded-xl shadow-lg mb-6">
+                    <h3 className="text-lg font-semibold text-gray-700 mb-3">Filter Subjects:</h3>
+                    <div className="flex flex-wrap gap-2">
+                        <Button
+                            variant={selectedSubjectFilter === 'all' ? 'primary' : 'secondary'}
+                            onClick={() => setSelectedSubjectFilter('all')}
+                            className="text-sm px-3 py-1.5"
+                        >
+                            All
+                        </Button>
+                        {currentSubjects.map(subject => (
+                            <Button
+                                key={subject.id}
+                                variant={selectedSubjectFilter === subject.id ? 'info' : 'secondary'}
+                                onClick={() => setSelectedSubjectFilter(subject.id)}
+                                className="text-sm px-3 py-1.5"
+                            >
+                                {subject.name}
+                            </Button>
+                        ))}
+                         {selectedSubjectFilter !== 'all' && (
+                            <Button
+                                variant="secondary"
+                                onClick={() => setSelectedSubjectFilter('all')}
+                                className="text-sm px-3 py-1.5 text-red-600 hover:bg-red-100 bg-red-50 border border-red-200"
+                            >
+                                Clear Filter
+                            </Button>
+                        )}
+                    </div>
+                </div>
+
+                {/* Task Tab Navigation */}
+                <div className="flex border-b border-gray-200 mb-6 sticky top-[170px] sm:top-[80px] bg-gray-50">
+                    <button onClick={() => setActiveTaskTab('today')} className={tabClasses('today', activeTaskTab)}>
+                        <Clock className="w-4 h-4 mx-auto mb-1" /> Today/Overdue ({taskTabCounts.today})
+                    </button>
+                    <button onClick={() => setActiveTaskTab('tomorrow')} className={tabClasses('tomorrow', activeTaskTab)}>
+                        <Calendar className="w-4 h-4 mx-auto mb-1" /> Tomorrow ({taskTabCounts.tomorrow})
+                    </button>
+                    <button onClick={() => setActiveTaskTab('upcoming')} className={tabClasses('upcoming', activeTaskTab)}>
+                        <ChevronRight className="w-4 h-4 mx-auto mb-1" /> Upcoming ({taskTabCounts.upcoming})
+                    </button>
+                    <button onClick={() => setActiveTaskTab('recommended')} className={tabClasses('recommended', activeTaskTab)}>
+                        <List className="w-4 h-4 mx-auto mb-1" /> Recommended ({taskTabCounts.recommended})
+                    </button>
+                     <button onClick={() => setActiveTaskTab('completed')} className={tabClasses('completed', activeTaskTab)}>
+                        <CheckCircle className="w-4 h-4 mx-auto mb-1" /> Completed ({taskTabCounts.totalCompleted})
+                    </button>
+                </div>
+                
+                {activeTaskTab !== 'completed' ? (
+                    <>
+                        <SectionTitle 
+                            dateMs={activeTaskTab === 'today' ? TODAY_MS : activeTaskTab === 'tomorrow' ? TOMORROW_MS : null}
+                            fallbackText={activeTaskTab === 'upcoming' ? "Upcoming Tasks (After Tomorrow)" : "Recommended Tasks (No Date)"}
+                        />
+                        <div className="grid md:grid-cols-2 gap-6">
+                            {filteredList.length > 0 ? (
+                                filteredList.map(topic => (
+                                    <TopicCard
+                                        key={topic.id}
+                                        topic={topic}
+                                        subjectName={topic.subjectName}
+                                        onMarkDone={handleMarkDoneClick}
+                                        onShift={() => {}} // Shift not applicable to tasks
+                                        onDelete={handleDeleteClick}
+                                        onEdit={handleOpenEditModal}
+                                    />
+                                ))
+                            ) : (
+                                <div className="col-span-2 bg-white p-8 rounded-xl shadow-lg text-center text-gray-500">
+                                    <h3 className="text-2xl font-semibold mb-2">No Tasks Found</h3>
+                                    <p>You are all caught up for this section!</p>
+                                </div>
+                            )}
+                        </div>
+                    </>
+                ) : (
+                    <div className="space-y-6">
+                        {CompletedTasksView.length > 0 ? (
+                            CompletedTasksView.map(group => (
+                                <div key={group.date} className="bg-white p-5 rounded-xl shadow-lg border-l-4 border-green-500">
+                                    <h4 className="text-xl font-bold text-green-700 mb-3 border-b pb-2">Completed: {group.date}</h4>
+                                    <div className="space-y-3">
+                                        {group.tasks.map(task => (
+                                            <div key={task.id} className="p-3 bg-green-50 rounded-lg flex justify-between items-center border border-green-200">
+                                                <p className="font-medium text-gray-800">{task.name}</p>
+                                                <span className="text-sm text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">
+                                                    {task.subjectName}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                             <div className="col-span-2 bg-white p-8 rounded-xl shadow-lg text-center text-gray-500">
+                                <h3 className="text-2xl font-semibold mb-2">No Completed Tasks</h3>
+                                <p>Mark some tasks done to see your progress here!</p>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </>
+        );
+    };
+    
+    // --- New Reports Section Component ---
+    const ReportsSection = () => {
+        const revisionTopics = getRevisionTopics;
+        const taskTopics = getTaskTopics;
+        
+        // 1. Overall Metrics
+        const totalItems = revisionTopics.length + taskTopics.length;
+        const completedItems = revisionTopics.filter(t => t.isComplete).length + taskTopics.filter(t => t.isComplete).length;
+        const completionRate = totalItems > 0 ? (completedItems / totalItems) * 100 : 0;
+        
+        // 2. Revision Performance (On-Time Rate)
+        const allRevisions = revisionTopics.flatMap(t => t.schedule.filter(s => !s.isLongTerm));
+        const totalRevisionsScheduled = allRevisions.length;
+        const revisionsCompleted = allRevisions.filter(s => s.completed).length;
+
+        const revisionsCompletedOnTime = allRevisions.filter(s => s.completed && s.completedDate <= s.targetDate).length;
+        
+        const completionRate2 = revisionsCompleted > 0 ? (revisionsCompletedOnTime / revisionsCompleted) * 100 : 0;
+
+        // 3. Revision Stage Breakdown (Item 3)
+        const stageBreakdown = useMemo(() => {
+            const stages = { 'Not Started': 0 };
+            REVISION_SCHEDULE.forEach((_, index) => stages[`R${index + 1}`] = 0);
+            stages['Complete'] = 0;
+            
+            revisionTopics.forEach(topic => {
+                const completed = topic.completedCount;
+                if (topic.isComplete) {
+                    stages['Complete']++;
+                } else if (completed === 0) {
+                    stages['Not Started']++;
+                } else {
+                    stages[`R${completed}`]++;
+                }
+            });
+            return stages;
+        }, [revisionTopics]);
+
+        // 4. Subject Performance Breakdown
+        const subjectPerformance = subjects.filter(s => s.type === 'revision').map(subject => {
+            const subjectTopics = revisionTopics.filter(t => t.subjectId === subject.id);
+            const scheduled = subjectTopics.flatMap(t => t.schedule.filter(s => !s.isLongTerm));
+            const completedOnTime = scheduled.filter(s => s.completed && s.completedDate <= s.targetDate).length;
+            const totalCompleted = scheduled.filter(s => s.completed).length; // Total completed revisions for this subject
+            
+            const successRate = totalCompleted > 0 ? (completedOnTime / totalCompleted) * 100 : 0;
+            return { name: subject.name, totalCompleted, completedOnTime, successRate };
+        }).filter(s => s.totalCompleted > 0);
+
+        // 5. Monthly Trend Data (Simulated/Simplified for visualization)
+        const monthlyData = useMemo(() => {
+            const data = [];
+            const sixMonthsAgo = new Date();
+            sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5); 
+            sixMonthsAgo.setDate(1);
+            
+            for (let i = 0; i < 6; i++) {
+                const monthStart = new Date(sixMonthsAgo.getFullYear(), sixMonthsAgo.getMonth() + i, 1);
+                const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+                
+                const topicsAdded = revisionTopics.filter(t => t.createdAt >= monthStart.getTime() && t.createdAt <= monthEnd.getTime()).length;
+                const revisionsInMonth = allRevisions.filter(s => s.completedDate >= monthStart.getTime() && s.completedDate <= monthEnd.getTime());
+                
+                const onTimeCount = revisionsInMonth.filter(s => s.completedDate <= s.targetDate).length;
+                const totalCompleted = revisionsInMonth.length;
+
+                const successRate = totalCompleted > 0 ? (onTimeCount / totalCompleted) * 100 : 0;
+                
+                data.push({
+                    month: monthStart.toLocaleDateString('en-US', { month: 'short' }),
+                    successRate: Math.round(successRate),
+                    topicsAdded: topicsAdded,
+                });
+            }
+            return data;
+        }, [revisionTopics]);
+        
+        // 6. Task Completion Trends (Item 4)
+        const taskCompletionTrends = useMemo(() => {
+            const trends = [];
+            const daysToTrack = 14; // Track last two weeks
+            for (let i = daysToTrack - 1; i >= 0; i--) {
+                const date = TODAY_MS - (i * 24 * 60 * 60 * 1000);
+                
+                const dueTasks = taskTopics.filter(t => t.taskDueDate && t.taskDueDate === date);
+                const completedTasks = dueTasks.filter(t => t.completedDate && t.completedDate >= date && t.completedDate < date + (24 * 60 * 60 * 1000));
+                
+                const totalDue = dueTasks.length;
+                const completedCount = completedTasks.length;
+                const completionRate = totalDue > 0 ? (completedCount / totalDue) * 100 : 0;
+                
+                trends.push({
+                    date: new Date(date).toLocaleDateString('en-US', { day: 'numeric', month: 'short' }),
+                    completionRate: Math.round(completionRate),
+                    completedCount,
+                    totalDue
+                });
+            }
+            return trends;
+        }, [taskTopics]);
+        
+        // 7. Revision Daily/Weekly Skip Analysis (Item 1)
+        const revisionDailyAnalysis = useMemo(() => {
+            const analysis = [];
+            const daysToTrack = 14;
+            for (let i = daysToTrack - 1; i >= 0; i--) {
+                const dateMs = TODAY_MS - (i * 24 * 60 * 60 * 1000);
+                
+                const scheduled = allRevisions.filter(s => s.targetDate === dateMs);
+                const done = scheduled.filter(s => s.completed && s.completedDate <= dateMs + (24 * 60 * 60 * 1000));
+                
+                const totalScheduled = scheduled.length;
+                const totalDone = done.length;
+                const totalSkipped = totalScheduled - totalDone;
+                
+                analysis.push({
+                    date: new Date(dateMs).toLocaleDateString('en-US', { day: 'numeric', month: 'short' }),
+                    totalScheduled,
+                    totalDone,
+                    totalSkipped,
+                    completionRate: totalScheduled > 0 ? (totalDone / totalScheduled) * 100 : 0,
+                });
+            }
+            return analysis;
+        }, [allRevisions]);
+        
+        const revisionWeeklyAnalysis = useMemo(() => {
+            const analysis = [];
+            for (let i = 3; i >= 0; i--) {
+                const weekStartMs = START_OF_WEEK_MS - (i * 7 * 24 * 60 * 60 * 1000);
+                const weekEndMs = weekStartMs + (7 * 24 * 60 * 60 * 1000);
+                
+                const scheduled = allRevisions.filter(s => s.targetDate >= weekStartMs && s.targetDate < weekEndMs);
+                const done = scheduled.filter(s => s.completed && s.completedDate < weekEndMs);
+                
+                const totalScheduled = scheduled.length;
+                const totalDone = done.length;
+                const totalSkipped = totalScheduled - totalDone;
+
+                analysis.push({
+                    weekLabel: new Date(weekStartMs).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                    totalScheduled,
+                    totalDone,
+                    totalSkipped,
+                    completionRate: totalScheduled > 0 ? (totalDone / totalScheduled) * 100 : 0,
+                });
+            }
+            return analysis;
+        }, [allRevisions]);
+
+
+        return (
+            <div className="space-y-8">
+                <h2 className="text-3xl font-bold text-gray-800 flex items-center mb-6">
+                    <BarChart3 className="w-6 h-6 mr-3" /> Performance Analytics
+                </h2>
+
+                {/* Overall Summary Grid */}
+                <div className="grid md:grid-cols-3 gap-4">
+                    <div className="bg-white p-6 rounded-xl shadow-lg border-l-4 border-blue-600">
+                        <p className="text-sm text-gray-500">Overall Items</p>
+                        <h3 className="text-3xl font-bold text-gray-800">{totalItems}</h3>
+                        <p className="text-sm text-green-600 font-semibold">{Math.round(completionRate)}% Completed</p>
+                    </div>
+                    <div className="bg-white p-6 rounded-xl shadow-lg border-l-4 border-green-600">
+                        <p className="text-sm text-gray-500">Revision On-Time Rate</p>
+                        <h3 className="text-3xl font-bold text-gray-800">{Math.round(completionRate2)}%</h3>
+                        <p className="text-sm text-gray-600 font-semibold">{revisionsCompletedOnTime} of {revisionsCompleted} completed revisions were on time.</p>
+                    </div>
+                    <div className="bg-white p-6 rounded-xl shadow-lg border-l-4 border-yellow-600">
+                        <p className="text-sm text-gray-500">Tasks Active / Complete</p>
+                        <h3 className="text-3xl font-bold text-gray-800">{taskTabCounts.totalActive} / {taskTabCounts.totalCompleted}</h3>
+                        <p className="text-sm text-gray-600 font-semibold">Total active tasks in Todo list.</p>
+                    </div>
+                </div>
+                
+                {/* Revision Stage Breakdown (Item 3) */}
+                <div className="bg-white p-6 rounded-xl shadow-lg">
+                    <h3 className="text-xl font-bold text-gray-800 mb-4">Revision Stage Breakdown</h3>
+                    <div className="flex justify-between items-end h-32 space-x-2 border-l border-b border-gray-300 pb-2">
+                        {Object.entries(stageBreakdown).map(([stage, count], index) => (
+                            <div key={stage} className="flex flex-col items-center flex-1 h-full relative group">
+                                <div 
+                                    style={{ height: `${(count / revisionTopics.length) * 100}%` }} 
+                                    className={`w-10 rounded-t-lg transition-all duration-700 relative ${stage === 'Complete' ? 'bg-green-500' : stage === 'Not Started' ? 'bg-red-500' : 'bg-blue-500'}`}
+                                >
+                                    <span className="absolute top-[-20px] text-xs font-bold w-full text-center text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        {count}
+                                    </span>
+                                </div>
+                                <span className="text-xs text-gray-600 mt-1 font-semibold">{stage}</span>
+                            </div>
+                        ))}
+                    </div>
+                    <p className="text-center text-sm text-gray-600 mt-4">Distribution of {revisionTopics.length} topics by current revision stage.</p>
+                </div>
+
+                {/* Revision Daily Skip Analysis (Item 1) */}
+                <div className="bg-white p-6 rounded-xl shadow-lg">
+                    <h3 className="text-xl font-bold text-gray-800 mb-4">Revision Completion: Last 14 Days (Daily)</h3>
+                    <div className="flex justify-between items-end h-48 space-x-1 border-l border-b border-gray-300 pb-2">
+                        {revisionDailyAnalysis.map((trend, index) => (
+                            <div key={index} className="flex flex-col items-center flex-1 h-full relative group">
+                                {/* Skipped/Pending Bar (Red) */}
+                                <div 
+                                    style={{ height: `${(trend.totalSkipped / trend.totalScheduled) * 100}%` }} 
+                                    className="w-full bg-red-400"
+                                ></div>
+                                {/* Done Bar (Green) */}
+                                <div 
+                                    style={{ height: `${(trend.totalDone / trend.totalScheduled) * 100}%` }} 
+                                    className="w-full bg-green-500 transition-all duration-700 relative"
+                                >
+                                    <span className="absolute top-[-25px] text-xs font-bold w-full text-center text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        {trend.totalDone}/{trend.totalScheduled}
+                                    </span>
+                                </div>
+                                
+                                {/* Date Label */}
+                                <span className="text-xs text-gray-500 mt-1">{trend.date}</span>
+                            </div>
+                        ))}
+                    </div>
+                    <p className="text-center text-sm text-gray-600 mt-4">Daily completion rate. (Red = Skipped/Pending, Green = Done)</p>
+                </div>
+                
+                {/* Revision Weekly Skip Analysis (Item 1) */}
+                <div className="bg-white p-6 rounded-xl shadow-lg">
+                    <h3 className="text-xl font-bold text-gray-800 mb-4">Revision Completion: Last 4 Weeks (Weekly)</h3>
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Week Starting</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Scheduled</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Done</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Skipped/Pending</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rate</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {revisionWeeklyAnalysis.map((trend, index) => (
+                                    <tr key={index}>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{trend.weekLabel}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{trend.totalScheduled}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-semibold">{trend.totalDone}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 font-semibold">{trend.totalSkipped}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-600">{Math.round(trend.completionRate)}%</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+
+                {/* Task Daily Completion Trend (Item 4) */}
+                <div className="bg-white p-6 rounded-xl shadow-lg">
+                    <h3 className="text-xl font-bold text-gray-800 mb-4">Daily Task Completion Trends (Last 14 Days)</h3>
+                    <div className="flex justify-between items-end h-48 space-x-1 border-l border-b border-gray-300 pb-2">
+                        {taskCompletionTrends.map((trend, index) => (
+                            <div key={index} className="flex flex-col items-center flex-1 h-full relative group">
+                                {/* Completion Rate Bar */}
+                                <div 
+                                    style={{ height: `${trend.completionRate}%` }} 
+                                    className="w-full bg-blue-500 rounded-t-lg transition-all duration-700 relative"
+                                >
+                                    <span className="absolute top-[-25px] text-xs font-bold w-full text-center text-gray-700 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        {trend.completionRate}%
+                                    </span>
+                                </div>
+                                
+                                {/* Completion Count */}
+                                <span className="text-xs text-green-600 mt-1 font-semibold">{trend.completedCount}/{trend.totalDue}</span>
+                                
+                                {/* Date Label - Show date every 3 days */}
+                                <span className={`text-xs text-gray-500 mt-1 ${index % 3 === 0 ? '' : 'hidden sm:inline'}`}>{trend.date}</span>
+                            </div>
+                        ))}
+                    </div>
+                    <p className="text-center text-sm text-gray-600 mt-4">Bar height = Completion Rate of tasks due on that day.</p>
+                </div>
+
+
+                {/* Subject Performance Table */}
+                <div className="bg-white p-6 rounded-xl shadow-lg">
+                    <h3 className="text-xl font-bold text-gray-800 mb-4">Subject On-Time Success Rate (Revisions)</h3>
+                    {subjectPerformance.length > 0 ? (
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Completed On Time</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Completed Revisions</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">On-Time Rate</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                    {subjectPerformance.map(subject => (
+                                        <tr key={subject.name}>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{subject.name}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{subject.completedOnTime}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{subject.totalCompleted}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-600">{Math.round(subject.successRate)}%</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    ) : (
+                        <p className="text-gray-500">No past revision data available to generate subject analysis.</p>
+                    )}
+                </div>
+
+            </div>
+        );
+    };
 
     // --- Main UI Render ---
     return (
         <div className="min-h-screen bg-gray-50 flex flex-col">
             {/* Header and Controls */}
-            <header className="bg-white shadow-md p-4 sticky top-0 z-10">
+            <header className="bg-white shadow-md p-4 sticky top-0 z-20"> {/* Higher z-index */}
                 <div className="max-w-6xl mx-auto flex flex-col gap-2"> {/* Stack on mobile */}
                     <div className="flex justify-between items-center w-full">
                         <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800">
-                            Revision Hub
+                            Welcome, {userName}!
                         </h1>
                         <div className="flex space-x-2 sm:space-x-3 items-center flex-shrink-0">
-                            <UserInfo />
-                            <TimerLogic /> 
+                            <Button 
+                                variant="outline"
+                                onClick={() => setIsProfileModalOpen(true)}
+                                className="flex items-center text-xs sm:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5"
+                            >
+                                <User className="w-4 h-4 mr-1"/> Profile
+                            </Button>
+                            <Button 
+                                variant="outline"
+                                onClick={() => setIsTimerModalOpen(true)}
+                                className="flex items-center text-xs sm:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5"
+                            >
+                                <Timer className="w-4 h-4 mr-1"/> Timer
+                            </Button>
                             <Button
                                 variant="secondary"
                                 onClick={() => signOut(auth)}
@@ -1529,7 +2411,32 @@ const AppLogic = ({ userId, topics, subjects, allSubjects }) => {
                         </div>
                     </div>
 
-                    {/* Action Buttons (Stacked below H1 on mobile) */}
+                    {/* Section Selector */}
+                    <div className="flex space-x-2 pt-2 border-t border-gray-100 mt-2 sm:mt-0 sm:border-t-0 sm:pt-0">
+                        <Button
+                            variant={activeSection === 'revision' ? 'primary' : 'outline'}
+                            onClick={() => setActiveSection('revision')}
+                            className="flex-1 min-w-[150px] text-base"
+                        >
+                            Spaced Revision
+                        </Button>
+                        <Button
+                            variant={activeSection === 'tasks' ? 'primary' : 'outline'}
+                            onClick={() => setActiveSection('tasks')}
+                            className="flex-1 min-w-[150px] text-base"
+                        >
+                            Study Tasks (Todo)
+                        </Button>
+                        <Button
+                            variant={activeSection === 'reports' ? 'primary' : 'outline'}
+                            onClick={() => setActiveSection('reports')}
+                            className="flex-1 min-w-[150px] text-base"
+                        >
+                            Reports
+                        </Button>
+                    </div>
+
+                    {/* Action Buttons */}
                     <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100 mt-2 sm:mt-0 sm:border-t-0 sm:pt-0">
                         <Button
                             variant="primary"
@@ -1543,7 +2450,7 @@ const AppLogic = ({ userId, topics, subjects, allSubjects }) => {
                             onClick={() => setIsAddSubjectModalOpen(true)}
                             className="flex-1 min-w-[120px] bg-purple-100 hover:bg-purple-200 text-purple-700"
                         >
-                            + Add Subject
+                            <BookOpen className="w-4 h-4 mr-1" /> Add Subject
                         </Button>
                         <Button
                             variant="secondary"
@@ -1558,126 +2465,73 @@ const AppLogic = ({ userId, topics, subjects, allSubjects }) => {
 
             <main className="flex-1 max-w-6xl mx-auto w-full p-4 sm:p-6">
                 
-                {/* Subject Filter (Pills) */}
-                <div className="bg-white p-4 rounded-xl shadow-lg mb-6">
-                    <h3 className="text-lg font-semibold text-gray-700 mb-3">Filter Topics:</h3>
-                    <div className="flex flex-wrap gap-2">
-                        <Button
-                            variant={selectedSubjectFilter === 'all' ? 'primary' : 'secondary'}
-                            onClick={() => setSelectedSubjectFilter('all')}
-                            className="text-sm px-3 py-1.5"
-                        >
-                            All ({processedTopics.length})
-                        </Button>
-                        {subjects.map(subject => (
-                            <Button
-                                key={subject.id}
-                                variant={selectedSubjectFilter === subject.id ? 'info' : 'secondary'}
-                                onClick={() => setSelectedSubjectFilter(subject.id)}
-                                className="text-sm px-3 py-1.5"
-                            >
-                                {subject.name}
-                            </Button>
-                        ))}
-                        {/* Reset Filter Button */}
-                        {selectedSubjectFilter !== 'all' && (
-                            <Button
-                                variant="secondary"
-                                onClick={() => setSelectedSubjectFilter('all')}
-                                className="text-sm px-3 py-1.5 text-red-600 hover:bg-red-100 bg-red-50 border border-red-200"
-                            >
-                                Clear Filter
-                            </Button>
-                        )}
-                    </div>
-                </div>
+                {/* Content Render based on Active Section */}
+                {activeSection === 'revision' ? 
+                    <RevisionSection 
+                        handleMarkDoneClick={handleMarkDoneClick}
+                        handleShift={handleShift}
+                        handleDeleteClick={handleDeleteClick}
+                        handleOpenEditModal={handleOpenEditModal}
+                    /> 
+                    : activeSection === 'tasks' ?
+                    <TaskSection 
+                        handleMarkDoneClick={handleMarkDoneClick}
+                        handleDeleteClick={handleDeleteClick}
+                        handleOpenEditModal={handleOpenEditModal}
+                    />
+                    :
+                    <ReportsSection />
+                }
 
-
-                {/* Tab Navigation */}
-                <div className="flex border-b border-gray-200 mb-6 sticky top-[170px] sm:top-[80px] bg-gray-50">
-                    <button onClick={() => setActiveTab('dashboard')} className={tabClasses('dashboard')}>
-                        <LayoutDashboard className="w-4 h-4 mx-auto mb-1" /> Dashboard
-                    </button>
-                    <button onClick={() => setActiveTab('pending')} className={tabClasses('pending')}>
-                        <Clock className="w-4 h-4 mx-auto mb-1" /> Pending ({tabCounts.pending})
-                    </button>
-                    <button onClick={() => setActiveTab('missed')} className={tabClasses('missed')}>
-                        <XCircle className="w-4 h-4 mx-auto mb-1" /> Missed ({tabCounts.missed})
-                    </button>
-                    <button onClick={() => setActiveTab('done')} className={tabClasses('done')}>
-                        <CheckCircle className="w-4 h-4 mx-auto mb-1" /> Done ({tabCounts.done})
-                    </button>
-                    <button onClick={() => setActiveTab('tasks')} className={tabClasses('tasks')}>
-                         <List className="w-4 h-4 mx-auto mb-1" /> Tasks ({tabCounts.tasks})
-                    </button>
-                    <button onClick={() => setActiveTab('calendar')} className={tabClasses('calendar')}>
-                        <Calendar className="w-4 h-4 mx-auto mb-1" /> Calendar
-                    </button>
-                </div>
-
-                {/* Tab Content */}
-                {activeTab === 'calendar' && (
-                    <CalendarView topics={processedTopics} allSubjects={allSubjects} />
-                )}
-
-                {activeTab !== 'calendar' && (
-                    <div className="grid md:grid-cols-2 gap-6">
-                        {filteredTopics.length > 0 ? (
-                            filteredTopics.map(topic => (
-                                <TopicCard
-                                    key={topic.id}
-                                    topic={topic}
-                                    subjectName={topic.subjectName}
-                                    onMarkDone={handleMarkDoneClick} // Use confirmation handler
-                                    onShift={handleShift}
-                                    onDelete={handleDeleteClick} // Use soft delete handler
-                                    onEdit={handleOpenEditModal}
-                                />
-                            ))
-                        ) : (
-                            <div className="col-span-2 bg-white p-8 rounded-xl shadow-lg text-center text-gray-500">
-                                <h3 className="text-2xl font-semibold mb-2">No Items Here</h3>
-                                {(activeTab === 'dashboard' || activeTab === 'tasks') && <p>Start by clicking "+ Add Item" above!</p>}
-                                {activeTab === 'pending' && <p>You are all caught up! No revisions or tasks due soon.</p>}
-                                {activeTab === 'missed' && <p>Great job! No missed revisions.</p>}
-                                {activeTab === 'done' && <p>Keep revising to move topics here!</p>}
-                            </div>
-                        )}
-                    </div>
-                )}
             </main>
 
             {/* Modals */}
             <AddTopicForm
                 userId={userId}
-                subjects={subjects}
+                subjects={subjects.filter(s => s.type === (activeSection === 'revision' ? 'revision' : 'task'))}
                 isOpen={isAddTopicModalOpen}
                 onClose={() => setIsAddTopicModalOpen(false)}
                 onAddTopic={handleAddTopic}
+                defaultType={activeSection === 'revision' ? 'revision' : 'task'}
             />
-            {/* Simplified AddSubjectForm call (since logic is simple) */}
-            <Modal isOpen={isAddSubjectModalOpen} onClose={() => setIsAddSubjectModalOpen(false)} title="Add New Subject">
-                <AddSubjectForm userId={userId} onClose={() => setIsAddSubjectModalOpen(false)} />
+            
+            <Modal isOpen={isAddSubjectModalOpen} onClose={() => setIsAddSubjectModalOpen(false)} title={`Add New Subject (${activeSection === 'revision' ? 'Revision' : 'Task'})`}>
+                <AddSubjectForm 
+                    userId={userId} 
+                    onClose={() => setIsAddSubjectModalOpen(false)} 
+                    subjectCollectionGetter={activeSection === 'revision' ? getRevisionSubjectsCollection : getTaskSubjectsCollection}
+                />
             </Modal>
             
             {topicToEdit && (
                 <EditTopicModal
                     userId={userId}
                     topic={topicToEdit}
-                    subjects={subjects}
+                    subjects={subjects.filter(s => s.type === topicToEdit.type)}
                     isOpen={isEditTopicModalOpen}
                     onClose={() => setIsEditTopicModalOpen(false)}
                     onSave={handleEditTopic}
                 />
             )}
+            
             <RecycleBinModal
-                userId={userId}
                 deletedTopics={deletedTopics}
                 isOpen={isRecycleBinOpen}
                 onClose={() => setIsRecycleBinOpen(false)}
                 onRecover={handleRecover}
                 onEmptyBin={(ids) => handlePermanentDelete(ids)}
             />
+            
+            <TimerModal isOpen={isTimerModalOpen} onClose={() => setIsTimerModalOpen(false)} />
+            
+            <ProfileModal
+                userId={userId}
+                userName={userName}
+                onSaveName={handleSaveName}
+                isOpen={isProfileModalOpen}
+                onClose={() => setIsProfileModalOpen(false)}
+            />
+
             {/* Confirmation Modal (Centralized confirmation for Mark Done and Delete) */}
             <ConfirmationModal
                 isOpen={confirmAction.isOpen}
@@ -1698,9 +2552,13 @@ const App = () => {
     const [userId, setUserId] = useState(null);
     const [isLoading, setIsLoading] = useState(true); // Tracks initial auth state
     const [topics, setTopics] = useState([]);
-    const [subjects, setSubjects] = useState([]);
-    const [allSubjects, setAllSubjects] = useState({});
+    const [revisionSubjects, setRevisionSubjects] = useState([]);
+    const [taskSubjects, setTaskSubjects] = useState([]);
+    const [allSubjectsMap, setAllSubjectsMap] = useState({});
     const [isAppInitialized, setIsAppInitialized] = useState(false);
+
+    // Combine subjects for unified processing
+    const combinedSubjects = useMemo(() => [...revisionSubjects, ...taskSubjects], [revisionSubjects, taskSubjects]);
 
     // 1. Authentication Listener (Handles login persistence)
     useEffect(() => {
@@ -1713,43 +2571,61 @@ const App = () => {
             setIsLoading(false); 
         });
 
-        // Set to true once the initial auth state has been checked
-        // This ensures the initial loading state is only shown once.
         setIsAppInitialized(true); 
 
         return () => unsubscribe();
     }, []);
 
 
-    // 2. Data Listener for Subjects
+    // 2. Data Listener for Revision Subjects
     useEffect(() => {
         if (!userId) {
-            setSubjects([]);
-            setAllSubjects({});
+            setRevisionSubjects([]);
             return;
         }
 
-        const q = query(getSubjectsCollection(userId));
+        const q = query(getRevisionSubjectsCollection(userId));
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const fetchedSubjects = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
-            setSubjects(fetchedSubjects);
-
-            // Create subject map for quick lookup in topic filtering
-            const subjectMap = fetchedSubjects.reduce((acc, subject) => {
-                acc[subject.id] = subject;
-                return acc;
-            }, {});
-            setAllSubjects(subjectMap);
+            const fetchedSubjects = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, type: 'revision' }));
+            setRevisionSubjects(fetchedSubjects);
         }, (error) => {
-            console.error("Error listening to subjects:", error);
+            console.error("Error listening to revision subjects:", error);
         });
 
         return () => unsubscribe();
     }, [userId]);
 
+     // 3. Data Listener for Task Subjects
+    useEffect(() => {
+        if (!userId) {
+            setTaskSubjects([]);
+            return;
+        }
 
-    // 3. Data Listener for Topics
+        const q = query(getTaskSubjectsCollection(userId));
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const fetchedSubjects = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id, type: 'task' }));
+            setTaskSubjects(fetchedSubjects);
+        }, (error) => {
+            console.error("Error listening to task subjects:", error);
+        });
+
+        return () => unsubscribe();
+    }, [userId]);
+
+    // 4. Update combined map when any subject list changes
+    useEffect(() => {
+        const map = combinedSubjects.reduce((acc, subject) => {
+            acc[subject.id] = subject;
+            return acc;
+        }, {});
+        setAllSubjectsMap(map);
+    }, [combinedSubjects]);
+
+
+    // 5. Data Listener for Topics
     useEffect(() => {
         if (!userId) {
             setTopics([]);
@@ -1767,6 +2643,16 @@ const App = () => {
 
         return () => unsubscribe();
     }, [userId]);
+
+    // 6. Calculate Deleted Topics for Recycle Bin
+    const deletedTopics = useMemo(() => {
+        const sixtyDaysAgo = Date.now() - (60 * 24 * 60 * 60 * 1000); // 60 days in milliseconds
+        
+        return topics.filter(t => t.deleted).map(t => ({
+            ...t,
+            isPermanentDelete: t.deletedAt && t.deletedAt < sixtyDaysAgo,
+        }));
+    }, [topics]);
 
 
     if (isLoading || !isAppInitialized) {
@@ -1786,105 +2672,10 @@ const App = () => {
         <AppLogic
             userId={userId}
             topics={topics}
-            subjects={subjects}
-            allSubjects={allSubjects}
+            subjects={combinedSubjects} // Pass combined list
+            allSubjects={allSubjectsMap} // Pass map for lookups
+            deletedTopics={deletedTopics} // Pass deleted topics list
         />
-    );
-};
-
-// --- AuthScreen Component ---
-
-const AuthScreen = ({ setUserId }) => {
-    const [isLogin, setIsLogin] = useState(true);
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [error, setError] = useState('');
-    const [successMessage, setSuccessMessage] = useState('');
-    const [loading, setLoading] = useState(false);
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setError('');
-        setSuccessMessage('');
-        setLoading(true);
-
-        try {
-            if (isLogin) {
-                const userCredential = await exponentialBackoff(() => signInWithEmailAndPassword(auth, email, password));
-                setUserId(userCredential.user.uid);
-            } else {
-                const userCredential = await exponentialBackoff(() => createUserWithEmailAndPassword(auth, email, password));
-                setUserId(userCredential.user.uid);
-            }
-        } catch (err) {
-            console.error(err);
-            const friendlyError = err.code ? err.code.replace('auth/', '').replace(/-/g, ' ') : 'An unknown error occurred.';
-            setError(`Error: ${friendlyError}`);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-            <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-sm">
-                <h2 className="text-3xl font-bold text-gray-800 text-center mb-6">
-                    {isLogin ? 'Login' : 'Register'}
-                </h2>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <input
-                        type="email"
-                        placeholder="Email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                        disabled={loading}
-                    />
-                    <input
-                        type="password"
-                        placeholder="Password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        required
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                        disabled={loading}
-                    />
-
-                    {error && (
-                        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg text-sm" role="alert">
-                            {error}
-                        </div>
-                    )}
-                    {successMessage && (
-                        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg text-sm" role="alert">
-                            {successMessage}
-                        </div>
-                    )}
-
-                    <Button type="submit" variant="primary" className="w-full" disabled={loading}>
-                        {loading ? 'Processing...' : (isLogin ? 'Sign In' : 'Create Account')}
-                    </Button>
-                </form>
-
-                <p className="mt-6 text-center text-sm">
-                    {isLogin ? "Don't have an account?" : "Already have an account?"}
-                    <button
-                        onClick={() => {
-                            setIsLogin(!isLogin);
-                            setError('');
-                            setSuccessMessage('');
-                            setEmail('');
-                            setPassword('');
-                        }}
-                        className="text-blue-600 hover:text-blue-800 font-semibold ml-1 transition-colors"
-                        disabled={loading}
-                    >
-                        {isLogin ? 'Register' : 'Login'}
-                    </button>
-                </p>
-            </div>
-        </div>
     );
 };
 
