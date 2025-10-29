@@ -3,7 +3,7 @@ import { initializeApp } from "firebase/app";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword } from "firebase/auth";
 import { getFirestore, doc, collection, onSnapshot, setDoc, query, updateDoc, deleteDoc, writeBatch, getDoc } from "firebase/firestore";
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'; 
-import { Clock, CheckCircle, XCircle, Plus, LayoutDashboard, Calendar, Users, User, List, Trash2, RotateCcw, Timer, BookOpen, Edit, ChevronRight, BarChart3, Lock } from 'lucide-react';
+import { Clock, CheckCircle, XCircle, Plus, LayoutDashboard, Calendar, Users, User, List, Trash2, RotateCcw, Timer, BookOpen, Edit, ChevronRight, BarChart3, Lock, Sun, Moon } from 'lucide-react';
 
 // --- Firebase Configuration (Hardcoded with User's provided values for deployment) ---
 const firebaseConfig = {
@@ -69,6 +69,7 @@ const dateToString = (date) => {
 };
 
 const dateToISOString = (date) => {
+    if (!date) return '';
     const d = date.toDate ? date.toDate() : new Date(date);
     return d.toISOString().split('T')[0];
 };
@@ -142,7 +143,7 @@ const Button = ({ children, onClick, className = '', disabled = false, variant =
             colorStyle = 'bg-blue-600 hover:bg-blue-700 text-white';
             break;
         case 'secondary':
-            colorStyle = 'bg-gray-200 hover:bg-gray-300 text-gray-800';
+            colorStyle = 'bg-gray-200 hover:bg-gray-300 text-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200';
             break;
         case 'success':
             colorStyle = 'bg-green-500 hover:bg-green-600 text-white';
@@ -154,7 +155,7 @@ const Button = ({ children, onClick, className = '', disabled = false, variant =
             colorStyle = 'bg-yellow-500 hover:bg-yellow-600 text-white';
             break;
         case 'outline':
-            colorStyle = 'border border-gray-300 hover:bg-gray-100 text-gray-700 shadow-none';
+            colorStyle = 'border border-gray-300 hover:bg-gray-100 text-gray-700 shadow-none dark:border-gray-600 dark:hover:bg-gray-700 dark:text-gray-200';
             break;
         case 'disabled':
             colorStyle = 'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none';
@@ -165,7 +166,7 @@ const Button = ({ children, onClick, className = '', disabled = false, variant =
     }
 
     if (disabled) {
-        colorStyle = 'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none';
+        colorStyle = 'bg-gray-300 text-gray-500 cursor-not-allowed shadow-none dark:bg-gray-700 dark:text-gray-400';
     }
 
     return (
@@ -184,12 +185,12 @@ const Modal = ({ isOpen, onClose, title, children, size = 'sm:max-w-lg' }) => {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[90] overflow-y-auto" style={{ backgroundColor: 'rgba(0,0,0,0.75)' }}>
-            <div className="flex items-center justify-center min-h-screen p-4">
-                <div className={`bg-white rounded-xl shadow-2xl w-full max-w-sm ${size} transform transition-all`}>
-                    <div className="px-6 py-4 border-b flex justify-between items-center">
-                        <h3 className="text-xl font-bold text-gray-800">{title}</h3>
-                        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors" type="button">
+        <div className="fixed inset-0 z-[90] overflow-y-auto" style={{ backgroundColor: 'rgba(0,0,0,0.75)' }} onClick={onClose}>
+            <div className="flex items-center justify-center min-h-screen p-4" onClick={e => e.stopPropagation()}>
+                <div className={`bg-white rounded-xl shadow-2xl w-full max-w-sm ${size} transform transition-all dark:bg-gray-800`}>
+                    <div className="px-6 py-4 border-b flex justify-between items-center dark:border-gray-700">
+                        <h3 className="text-xl font-bold text-gray-800 dark:text-gray-200">{title}</h3>
+                        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors dark:text-gray-500 dark:hover:text-gray-400" type="button">
                             <XCircle className="h-6 w-6" />
                         </button>
                     </div>
@@ -207,7 +208,7 @@ const ConfirmationModal = ({ isOpen, onClose, title, message, onConfirm, confirm
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title={title}>
-            <p className="text-gray-700 mb-6">{message}</p>
+            <p className="text-gray-700 mb-6 dark:text-gray-300">{message}</p>
             <div className="flex justify-end space-x-3">
                 <Button variant="secondary" onClick={onClose}>Cancel</Button>
                 <Button variant="danger" onClick={() => { onConfirm(); onClose(); }}>{confirmText}</Button>
@@ -250,9 +251,9 @@ const AuthScreen = ({ setUserId }) => {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-            <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-sm">
-                <h2 className="text-3xl font-bold text-gray-800 text-center mb-6">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4 dark:bg-gray-900">
+            <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-sm dark:bg-gray-800">
+                <h2 className="text-3xl font-bold text-gray-800 text-center mb-6 dark:text-gray-200">
                     {isLogin ? 'Login' : 'Register'}
                 </h2>
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -262,7 +263,7 @@ const AuthScreen = ({ setUserId }) => {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         required
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:placeholder-gray-400"
                         disabled={loading}
                     />
                     <input
@@ -271,17 +272,17 @@ const AuthScreen = ({ setUserId }) => {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         required
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition-colors bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:placeholder-gray-400"
                         disabled={loading}
                     />
 
                     {error && (
-                        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg text-sm" role="alert">
+                        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg text-sm dark:bg-red-900 dark:border-red-800 dark:text-red-200" role="alert">
                             {error}
                         </div>
                     )}
                     {successMessage && (
-                        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg text-sm" role="alert">
+                        <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded-lg text-sm dark:bg-green-900 dark:border-green-800 dark:text-green-200" role="alert">
                             {successMessage}
                         </div>
                     )}
@@ -291,7 +292,7 @@ const AuthScreen = ({ setUserId }) => {
                     </Button>
                 </form>
 
-                <p className="mt-6 text-center text-sm">
+                <p className="mt-6 text-center text-sm dark:text-gray-400">
                     {isLogin ? "Don't have an account?" : "Already have an account?"}
                     <button
                         onClick={() => {
@@ -301,7 +302,7 @@ const AuthScreen = ({ setUserId }) => {
                             setEmail('');
                             setPassword('');
                         }}
-                        className="text-blue-600 hover:text-blue-800 font-semibold ml-1 transition-colors"
+                        className="text-blue-600 hover:text-blue-800 font-semibold ml-1 transition-colors dark:text-blue-400 dark:hover:text-blue-300"
                         disabled={loading}
                     >
                         {isLogin ? 'Register' : 'Login'}
@@ -373,14 +374,14 @@ const ProfileModal = ({ userId, isOpen, onClose, userName, onSaveName }) => {
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="User Profile & Settings" size="sm:max-w-xl">
             <div className="space-y-6">
-                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                    <h4 className="font-bold text-lg text-blue-800 flex items-center"><User className="w-5 h-5 mr-2" /> Account Details</h4>
-                    <p className="text-sm text-gray-700 mt-2">Email: <span className="font-medium text-blue-700">{currentUser?.email || 'N/A'}</span></p>
-                    <p className="text-sm text-gray-700">User ID: <code className="text-xs text-blue-700">{userId}</code></p>
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 dark:bg-blue-900/20 dark:border-blue-800">
+                    <h4 className="font-bold text-lg text-blue-800 flex items-center dark:text-blue-200"><User className="w-5 h-5 mr-2" /> Account Details</h4>
+                    <p className="text-sm text-gray-700 mt-2 dark:text-gray-300">Email: <span className="font-medium text-blue-700 dark:text-blue-300">{currentUser?.email || 'N/A'}</span></p>
+                    <p className="text-sm text-gray-700 dark:text-gray-300">User ID: <code className="text-xs text-blue-700 dark:text-blue-300">{userId}</code></p>
                 </div>
 
-                <div className="p-4 border rounded-lg">
-                    <h4 className="font-bold text-lg text-gray-800 flex items-center mb-3"><Edit className="w-5 h-5 mr-2" /> Change Display Name</h4>
+                <div className="p-4 border rounded-lg dark:border-gray-700">
+                    <h4 className="font-bold text-lg text-gray-800 flex items-center mb-3 dark:text-gray-200"><Edit className="w-5 h-5 mr-2" /> Change Display Name</h4>
                     <form onSubmit={handleSaveName} className="flex space-x-3">
                         <input
                             type="text"
@@ -388,7 +389,7 @@ const ProfileModal = ({ userId, isOpen, onClose, userName, onSaveName }) => {
                             onChange={(e) => setName(e.target.value)}
                             placeholder="Your Display Name"
                             required
-                            className="flex-grow p-2 border border-gray-300 rounded-lg"
+                            className="flex-grow p-2 border border-gray-300 rounded-lg bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
                             disabled={isSavingName}
                         />
                         <Button type="submit" variant="primary" disabled={isSavingName || name === userName}>
@@ -397,8 +398,8 @@ const ProfileModal = ({ userId, isOpen, onClose, userName, onSaveName }) => {
                     </form>
                 </div>
 
-                <div className="p-4 border rounded-lg">
-                    <h4 className="font-bold text-lg text-gray-800 flex items-center mb-3"><Lock className="w-5 h-5 mr-2" /> Change Password</h4>
+                <div className="p-4 border rounded-lg dark:border-gray-700">
+                    <h4 className="font-bold text-lg text-gray-800 flex items-center mb-3 dark:text-gray-200"><Lock className="w-5 h-5 mr-2" /> Change Password</h4>
                     <form onSubmit={handleChangePassword} className="space-y-3">
                         <input
                             type="password"
@@ -406,7 +407,7 @@ const ProfileModal = ({ userId, isOpen, onClose, userName, onSaveName }) => {
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             required
-                            className="w-full p-2 border border-gray-300 rounded-lg"
+                            className="w-full p-2 border border-gray-300 rounded-lg bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:placeholder-gray-400"
                             disabled={isChangingPassword}
                         />
                         <input
@@ -415,14 +416,14 @@ const ProfileModal = ({ userId, isOpen, onClose, userName, onSaveName }) => {
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
                             required
-                            className="w-full p-2 border border-gray-300 rounded-lg"
+                            className="w-full p-2 border border-gray-300 rounded-lg bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:placeholder-gray-400"
                             disabled={isChangingPassword}
                         />
                          {passwordError && (
-                            <div className="bg-red-100 text-red-700 p-2 rounded-lg text-sm">{passwordError}</div>
+                            <div className="bg-red-100 text-red-700 p-2 rounded-lg text-sm dark:bg-red-900 dark:text-red-200">{passwordError}</div>
                         )}
                         {passwordSuccess && (
-                            <div className="bg-green-100 text-green-700 p-2 rounded-lg text-sm">{passwordSuccess}</div>
+                            <div className="bg-green-100 text-green-700 p-2 rounded-lg text-sm dark:bg-green-900 dark:text-green-200">{passwordSuccess}</div>
                         )}
                         <div className="flex justify-end">
                             <Button type="submit" variant="danger" disabled={isChangingPassword || !password || !confirmPassword}>
@@ -473,7 +474,7 @@ const TimerModal = ({ isOpen, onClose }) => {
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Problem Solving Timer" size="sm:max-w-md">
             <div className="flex flex-col items-center space-y-6">
-                <div className="text-6xl sm:text-7xl font-mono font-bold text-gray-800 bg-gray-100 p-6 rounded-xl shadow-inner w-full text-center">
+                <div className="text-6xl sm:text-7xl font-mono font-bold text-gray-800 bg-gray-100 p-6 rounded-xl shadow-inner w-full text-center dark:text-gray-200 dark:bg-gray-700">
                     {formatTime(time)}
                 </div>
                 <div className="flex space-x-4">
@@ -505,11 +506,11 @@ const RecycleBinModal = ({ deletedTopics, isOpen, onClose, onRecover, onEmptyBin
 
     return (
         <Modal isOpen={isOpen} onClose={onClose} title="Recycle Bin" size="sm:max-w-2xl">
-            <p className="text-sm text-gray-600 mb-4">
+            <p className="text-sm text-gray-600 mb-4 dark:text-gray-400">
                 Items are permanently deleted 60 days after being moved here.
             </p>
-            <div className="flex justify-between items-center mb-4 border-b pb-2">
-                <span className="font-semibold text-gray-700">Total Items: {activeDeletedTopics.length}</span>
+            <div className="flex justify-between items-center mb-4 border-b pb-2 dark:border-gray-700">
+                <span className="font-semibold text-gray-700 dark:text-gray-300">Total Items: {activeDeletedTopics.length}</span>
                 <Button 
                     variant="danger" 
                     onClick={() => onEmptyBin(activeDeletedTopics.map(t => t.id))}
@@ -522,16 +523,16 @@ const RecycleBinModal = ({ deletedTopics, isOpen, onClose, onRecover, onEmptyBin
             
             <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
                 {activeDeletedTopics.length === 0 ? (
-                    <div className="text-center p-8 bg-gray-100 rounded-lg">
-                        <Trash2 className="w-8 h-8 mx-auto text-gray-400 mb-2"/>
-                        <p className="text-gray-600">Recycle Bin is empty.</p>
+                    <div className="text-center p-8 bg-gray-100 rounded-lg dark:bg-gray-700">
+                        <Trash2 className="w-8 h-8 mx-auto text-gray-400 mb-2 dark:text-gray-500"/>
+                        <p className="text-gray-600 dark:text-gray-400">Recycle Bin is empty.</p>
                     </div>
                 ) : (
                     activeDeletedTopics.map(topic => (
-                        <div key={topic.id} className="p-4 bg-white rounded-lg border border-gray-200 flex justify-between items-center shadow-sm">
+                        <div key={topic.id} className="p-4 bg-white rounded-lg border border-gray-200 flex justify-between items-center shadow-sm dark:bg-gray-800 dark:border-gray-700">
                             <div>
-                                <p className="font-semibold text-gray-800">{topic.name}</p>
-                                <p className="text-xs text-gray-500">Deleted: {dateToString(topic.deletedAt)}</p>
+                                <p className="font-semibold text-gray-800 dark:text-gray-200">{topic.name}</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">Deleted: {dateToString(topic.deletedAt)}</p>
                             </div>
                             <Button variant="success" onClick={() => onRecover(topic.id)} className="text-xs py-1 px-3">
                                 Restore
@@ -540,6 +541,96 @@ const RecycleBinModal = ({ deletedTopics, isOpen, onClose, onRecover, onEmptyBin
                     ))
                 )}
             </div>
+        </Modal>
+    );
+};
+
+// --- Manage Subjects Modal ---
+
+const ManageSubjectsModal = ({ isOpen, onClose, subjects, onEdit, title }) => {
+    if (!isOpen) return null;
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title={title} size="sm:max-w-lg">
+            <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+                {subjects.length === 0 ? (
+                    <p className="text-gray-500 text-center py-4 dark:text-gray-400">No subjects yet. Add one to get started.</p>
+                ) : (
+                    subjects.map(subject => (
+                        <div key={subject.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border dark:bg-gray-700 dark:border-gray-600">
+                            <span className="font-medium text-gray-800 dark:text-gray-200">{subject.name}</span>
+                            <Button 
+                                variant="outline" 
+                                onClick={() => {
+                                    onEdit(subject);
+                                    onClose();
+                                }} 
+                                className="text-xs px-3 py-1"
+                            >
+                                <Edit className="w-3 h-3 mr-1" /> Edit
+                            </Button>
+                        </div>
+                    ))
+                )}
+            </div>
+            <div className="flex justify-end space-x-2 mt-4 pt-2 border-t dark:border-gray-700">
+                <Button variant="secondary" onClick={onClose}>Close</Button>
+            </div>
+        </Modal>
+    );
+};
+
+// --- Edit Subject Modal ---
+
+const EditSubjectModal = ({ isOpen, onClose, subject, userId }) => {
+    const [name, setName] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (isOpen && subject) {
+            setName(subject.name);
+        }
+    }, [isOpen, subject]);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!name.trim() || !subject || !userId) return;
+
+        setLoading(true);
+        try {
+            const collectionGetter = subject.type === 'revision' ? getRevisionSubjectsCollection : getTaskSubjectsCollection;
+            const subjectRef = doc(collectionGetter(userId), subject.id);
+            await exponentialBackoff(() => updateDoc(subjectRef, { name: name.trim() }));
+        } catch (error) {
+            console.error('Error updating subject:', error);
+        } finally {
+            setLoading(false);
+            onClose();
+            setName('');
+        }
+    };
+
+    if (!isOpen || !subject) return null;
+
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title={`Edit ${subject.type === 'revision' ? 'Revision' : 'Task'} Subject`}>
+            <form onSubmit={handleSubmit}>
+                <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Subject Name"
+                    required
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 mb-4 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:placeholder-gray-400"
+                    disabled={loading}
+                />
+                <div className="flex justify-end space-x-2">
+                    <Button variant="secondary" onClick={onClose} disabled={loading}>Cancel</Button>
+                    <Button type="submit" variant="primary" disabled={loading || !name.trim()}>
+                        {loading ? 'Saving...' : 'Save Changes'}
+                    </Button>
+                </div>
+            </form>
         </Modal>
     );
 };
@@ -570,18 +661,18 @@ const SubtopicInputList = ({ subtopics, setSubtopics, disabled }) => {
     };
 
     return (
-        <div className="space-y-3 p-4 bg-gray-50 rounded-lg border">
-            <h4 className="text-base font-semibold text-gray-700">Subtopics / Problems (Optional)</h4>
+        <div className="space-y-3 p-4 bg-gray-50 rounded-lg border dark:bg-gray-700/50 dark:border-gray-600">
+            <h4 className="text-base font-semibold text-gray-700 dark:text-gray-300">Subtopics / Problems (Optional)</h4>
             
             <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
                 {subtopics.map((sub) => (
-                    <div key={sub.id} className="flex items-center space-x-2 bg-white p-2 border rounded-lg shadow-sm">
+                    <div key={sub.id} className="flex items-center space-x-2 bg-white p-2 border rounded-lg shadow-sm dark:bg-gray-800 dark:border-gray-600">
                         <input
                             type="text"
                             value={sub.name}
                             onChange={(e) => updateSubtopic(sub.id, 'name', e.target.value)}
                             placeholder="Subtopic Name / Problem Title"
-                            className="flex-3 p-2 border border-gray-200 rounded-lg text-sm w-full"
+                            className="flex-3 p-2 border border-gray-200 rounded-lg text-sm w-full bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:placeholder-gray-400"
                             disabled={disabled}
                         />
                         <input
@@ -589,7 +680,7 @@ const SubtopicInputList = ({ subtopics, setSubtopics, disabled }) => {
                             value={sub.number}
                             onChange={(e) => updateSubtopic(sub.id, 'number', e.target.value)}
                             placeholder="No."
-                            className="flex-1 w-1/4 p-2 border border-gray-200 rounded-lg text-sm text-center"
+                            className="flex-1 w-1/4 p-2 border border-gray-200 rounded-lg text-sm text-center bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:placeholder-gray-400"
                             disabled={disabled}
                         />
                         <button
@@ -608,7 +699,7 @@ const SubtopicInputList = ({ subtopics, setSubtopics, disabled }) => {
                 type="button" 
                 onClick={(e) => { e.stopPropagation(); addSubtopic(); }} 
                 variant="secondary"
-                className="w-full justify-center text-blue-600 bg-blue-100 hover:bg-blue-200 disabled:opacity-50"
+                className="w-full justify-center text-blue-600 bg-blue-100 hover:bg-blue-200 disabled:opacity-50 dark:text-blue-400 dark:bg-blue-900/30 dark:hover:bg-blue-900/50"
                 disabled={disabled}
             >
                 <Plus className="h-4 w-4 mr-1" /> Add Problem/Subtopic
@@ -711,7 +802,7 @@ const AddTopicForm = ({ userId, subjects, isOpen, onClose, onAddTopic, defaultTy
                     onChange={(e) => setTopicName(e.target.value)}
                     placeholder={isRevision ? "Topic Name" : "Task Name (e.g., Read Chapter 3)"}
                     required
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 mb-4"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 mb-4 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:placeholder-gray-400"
                     disabled={loading}
                 />
                 
@@ -720,7 +811,7 @@ const AddTopicForm = ({ userId, subjects, isOpen, onClose, onAddTopic, defaultTy
                         value={selectedSubjectId}
                         onChange={(e) => setSelectedSubjectId(e.target.value)}
                         required
-                        className="flex-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                        className="flex-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
                         disabled={loading || !hasSubjects}
                     >
                         {!hasSubjects && <option value="">No Subjects Added</option>}
@@ -736,7 +827,7 @@ const AddTopicForm = ({ userId, subjects, isOpen, onClose, onAddTopic, defaultTy
                             onChange={(e) => setInitialDate(e.target.value)}
                             required
                             title="Original Study Date (Used to calculate schedule)"
-                            className="w-full sm:w-1/2 p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full sm:w-1/2 p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 dark:border-gray-600"
                             disabled={loading}
                         />
                     ) : (
@@ -744,7 +835,7 @@ const AddTopicForm = ({ userId, subjects, isOpen, onClose, onAddTopic, defaultTy
                              <select
                                 value={taskSchedule}
                                 onChange={(e) => { setTaskSchedule(e.target.value); if (e.target.value !== 'specific') setTaskDueDate(dateToISOString(TODAY_MS)); }}
-                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
                                 disabled={loading}
                             >
                                 <option value="today">Schedule Today</option>
@@ -759,12 +850,12 @@ const AddTopicForm = ({ userId, subjects, isOpen, onClose, onAddTopic, defaultTy
                                     onChange={(e) => setTaskDueDate(e.target.value)}
                                     required
                                     title="Specific Due Date"
-                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 dark:border-gray-600"
                                     disabled={loading}
                                 />
                             )}
                             {taskSchedule === 'recommended' && (
-                                <p className="text-xs text-gray-500 p-1">No due date. Appears in "Recommended" tab.</p>
+                                <p className="text-xs text-gray-500 p-1 dark:text-gray-400">No due date. Appears in "Recommended" tab.</p>
                             )}
                         </div>
                     )}
@@ -773,7 +864,7 @@ const AddTopicForm = ({ userId, subjects, isOpen, onClose, onAddTopic, defaultTy
                 <SubtopicInputList subtopics={subtopics} setSubtopics={setSubtopics} disabled={loading} />
 
                 {isRevision && (
-                    <div className="mt-4 flex items-center space-x-2 bg-purple-50 p-3 rounded-lg border border-purple-200">
+                    <div className="mt-4 flex items-center space-x-2 bg-purple-50 p-3 rounded-lg border border-purple-200 dark:bg-purple-900/20 dark:border-purple-800">
                         <input 
                             type="checkbox" 
                             id="enableLtr" 
@@ -781,7 +872,7 @@ const AddTopicForm = ({ userId, subjects, isOpen, onClose, onAddTopic, defaultTy
                             onChange={(e) => setEnableLtr(e.target.checked)}
                             className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
                         />
-                        <label htmlFor="enableLtr" className="text-sm font-medium text-purple-800">
+                        <label htmlFor="enableLtr" className="text-sm font-medium text-purple-800 dark:text-purple-200">
                             Enable Long-Term Review (45 Days after final revision)
                         </label>
                     </div>
@@ -811,12 +902,12 @@ const EditTopicModal = ({ userId, topic, subjects, isOpen, onClose, onSave }) =>
     
     useEffect(() => {
         if (topic && isOpen) {
-            setTopicName(topic.name);
-            setSelectedSubjectId(topic.subjectId);
+            setTopicName(topic.name || '');
+            setSelectedSubjectId(topic.subjectId || '');
             setInitialDate(topic.type === 'revision' ? dateToISOString(topic.initialStudyDate) : dateToISOString(TODAY_MS));
-            setTaskDueDate(topic.taskDueDate ? dateToISOString(topic.taskDueDate) : dateToISOString(TODAY_MS));
+            setTaskDueDate(topic.taskDueDate ? dateToISOString(topic.taskDueDate) : '');
             setEnableLtr(topic.enableLtr || false);
-            setSubtopics(topic.subtopics?.map(sub => ({...sub, id: sub.id || Math.random()})) || []);
+            setSubtopics(topic.subtopics?.map((sub, index) => ({...sub, id: sub.id || Date.now() + index})) || []);
         }
     }, [topic, isOpen]);
 
@@ -851,7 +942,7 @@ const EditTopicModal = ({ userId, topic, subjects, isOpen, onClose, onSave }) =>
                     onChange={(e) => setTopicName(e.target.value)}
                     placeholder="Topic Name"
                     required
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 mb-4"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 mb-4 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:placeholder-gray-400"
                     disabled={loading}
                 />
                 <div className="flex flex-col sm:flex-row sm:space-x-4 space-y-4 sm:space-y-0 mb-4">
@@ -859,7 +950,7 @@ const EditTopicModal = ({ userId, topic, subjects, isOpen, onClose, onSave }) =>
                         value={selectedSubjectId}
                         onChange={(e) => setSelectedSubjectId(e.target.value)}
                         required
-                        className="flex-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                        className="flex-1 w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200"
                         disabled={loading || subjects.length === 0}
                     >
                         {subjects.length === 0 && <option value="">No Subjects Added</option>}
@@ -875,7 +966,7 @@ const EditTopicModal = ({ userId, topic, subjects, isOpen, onClose, onSave }) =>
                             onChange={(e) => setInitialDate(e.target.value)}
                             required
                             title="Original Study Date (Changing this recalculates the schedule)"
-                            className="w-full sm:w-1/2 p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                            className="w-full sm:w-1/2 p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 dark:border-gray-600"
                             disabled={loading}
                         />
                     ) : (
@@ -883,22 +974,22 @@ const EditTopicModal = ({ userId, topic, subjects, isOpen, onClose, onSave }) =>
                             type="date"
                             value={taskDueDate}
                             onChange={(e) => setTaskDueDate(e.target.value)}
-                            title="Due Date for this task"
-                            className="w-full sm:w-1/2 p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                            title="Due Date for this task (leave empty for 'Recommended')"
+                            className="w-full sm:w-1/2 p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-white dark:bg-gray-700 dark:border-gray-600"
                             disabled={loading}
                         />
                     )}
                 </div>
-                <p className='text-xs text-yellow-600 bg-yellow-50 p-2 rounded-lg mb-4'>
+                <p className='text-xs text-yellow-600 bg-yellow-50 p-2 rounded-lg mb-4 dark:text-yellow-400 dark:bg-yellow-900/20'>
                     {isRevision 
                         ? `*Changing the Study Date will regenerate the entire revision schedule (revisions completed so far will be lost).` 
-                        : `*Optional: Task Due Date is used for Pending reminders.`}
+                        : `*Optional: Task Due Date is used for Pending reminders. Leave empty for "Recommended" tab.`}
                 </p>
                 
                 <SubtopicInputList subtopics={subtopics} setSubtopics={setSubtopics} disabled={loading} />
 
                 {isRevision && (
-                    <div className="mt-4 flex items-center space-x-2 bg-purple-50 p-3 rounded-lg border border-purple-200">
+                    <div className="mt-4 flex items-center space-x-2 bg-purple-50 p-3 rounded-lg border border-purple-200 dark:bg-purple-900/20 dark:border-purple-800">
                         <input 
                             type="checkbox" 
                             id="enableLtr-edit" 
@@ -906,7 +997,7 @@ const EditTopicModal = ({ userId, topic, subjects, isOpen, onClose, onSave }) =>
                             onChange={(e) => setEnableLtr(e.target.checked)}
                             className="w-4 h-4 text-purple-600 border-gray-300 rounded focus:ring-purple-500"
                         />
-                        <label htmlFor="enableLtr-edit" className="text-sm font-medium text-purple-800">
+                        <label htmlFor="enableLtr-edit" className="text-sm font-medium text-purple-800 dark:text-purple-200">
                             Enable Long-Term Review (45 Days after final revision)
                         </label>
                     </div>
@@ -925,10 +1016,18 @@ const EditTopicModal = ({ userId, topic, subjects, isOpen, onClose, onSave }) =>
 
 // --- Calendar View Component ---
 
-const CalendarView = ({ topics, allSubjects }) => {
+const CalendarView = ({ topics, allSubjects, isTaskView = false }) => {
     const [currentDate, setCurrentDate] = useState(today());
     const [selectedDate, setSelectedDate] = useState(null);
     const [modalOpen, setModalOpen] = useState(false);
+
+    useEffect(() => {
+        if (selectedDate !== null) {
+            setModalOpen(true);
+        } else {
+            setModalOpen(false);
+        }
+    }, [selectedDate]);
 
     const startOfMonth = useMemo(() => {
         const d = new Date(currentDate);
@@ -943,39 +1042,56 @@ const CalendarView = ({ topics, allSubjects }) => {
 
     const firstDayOfWeek = startOfMonth.getDay();
 
-    const revisionMap = useMemo(() => {
+    const itemMap = useMemo(() => {
         const map = new Map();
-        topics.forEach(topic => {
-            topic.schedule?.forEach((scheduleItem, index) => {
-                if (!scheduleItem.completed && scheduleItem.targetDate !== Infinity) {
-                    const dateKey = dateToISOString(new Date(scheduleItem.targetDate));
+        if (isTaskView) {
+            topics.forEach(topic => {
+                if (topic.type === 'task' && topic.taskDueDate && !topic.isComplete) {
+                    const dateKey = dateToISOString(new Date(topic.taskDueDate));
                     if (!map.has(dateKey)) {
                         map.set(dateKey, []);
                     }
                     map.get(dateKey).push({
-                        type: 'Revision',
+                        type: 'Task',
                         topicName: topic.name,
                         subjectName: allSubjects[topic.subjectId]?.name || 'Unknown',
-                        isMissed: scheduleItem.targetDate < TODAY_MS,
+                        isMissed: topic.taskDueDate < TODAY_MS,
                     });
                 }
             });
-
-            if (topic.type === 'task' && topic.taskDueDate && !topic.isComplete) {
-                const dateKey = dateToISOString(new Date(topic.taskDueDate));
-                if (!map.has(dateKey)) {
-                    map.set(dateKey, []);
-                }
-                map.get(dateKey).push({
-                    type: 'Task',
-                    topicName: topic.name,
-                    subjectName: allSubjects[topic.subjectId]?.name || 'Unknown',
-                    isMissed: topic.taskDueDate < TODAY_MS,
+        } else {
+            topics.forEach(topic => {
+                topic.schedule?.forEach((scheduleItem) => {
+                    if (!scheduleItem.completed && scheduleItem.targetDate !== Infinity) {
+                        const dateKey = dateToISOString(new Date(scheduleItem.targetDate));
+                        if (!map.has(dateKey)) {
+                            map.set(dateKey, []);
+                        }
+                        map.get(dateKey).push({
+                            type: 'Revision',
+                            topicName: topic.name,
+                            subjectName: allSubjects[topic.subjectId]?.name || 'Unknown',
+                            isMissed: scheduleItem.targetDate < TODAY_MS,
+                        });
+                    }
                 });
-            }
-        });
+
+                if (topic.type === 'task' && topic.taskDueDate && !topic.isComplete) {
+                    const dateKey = dateToISOString(new Date(topic.taskDueDate));
+                    if (!map.has(dateKey)) {
+                        map.set(dateKey, []);
+                    }
+                    map.get(dateKey).push({
+                        type: 'Task',
+                        topicName: topic.name,
+                        subjectName: allSubjects[topic.subjectId]?.name || 'Unknown',
+                        isMissed: topic.taskDueDate < TODAY_MS,
+                    });
+                }
+            });
+        }
         return map;
-    }, [topics, allSubjects]);
+    }, [topics, allSubjects, isTaskView]);
 
     const handlePrevMonth = () => {
         const newDate = new Date(currentDate);
@@ -994,25 +1110,23 @@ const CalendarView = ({ topics, allSubjects }) => {
     const handleToday = () => {
         setCurrentDate(today());
         setSelectedDate(today());
-        setModalOpen(true);
     };
 
     const handleDayClick = (dayOfMonth) => {
         const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), dayOfMonth);
         setSelectedDate(date);
-        setModalOpen(true);
     };
 
     const todayISO = dateToISOString(today());
     const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
     return (
-        <div className="p-4 bg-white rounded-xl shadow-lg">
+        <div className="p-4 bg-white rounded-xl shadow-lg dark:bg-gray-800">
             <header className="flex justify-between items-center mb-6">
                 <Button onClick={handlePrevMonth} variant="secondary">
                     ←
                 </Button>
-                <div className="text-xl font-bold text-gray-800 flex flex-col items-center">
+                <div className="text-xl font-bold text-gray-800 flex flex-col items-center dark:text-gray-200">
                     {currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
                     <Button onClick={handleToday} variant="secondary" className="mt-2 py-1 px-3 text-xs">Jump to Today</Button>
                 </div>
@@ -1021,9 +1135,9 @@ const CalendarView = ({ topics, allSubjects }) => {
                 </Button>
             </header>
 
-            <div className="grid grid-cols-7 gap-1 text-center font-medium text-sm text-gray-500 mb-2">
+            <div className="grid grid-cols-7 gap-1 text-center font-medium text-sm text-gray-500 mb-2 dark:text-gray-400">
                 {daysOfWeek.map(day => (
-                    <div key={day} className="py-2 text-blue-600 font-bold">{day}</div>
+                    <div key={day} className="py-2 text-blue-600 font-bold dark:text-blue-400">{day}</div>
                 ))}
             </div>
 
@@ -1036,22 +1150,22 @@ const CalendarView = ({ topics, allSubjects }) => {
                     const day = i + 1;
                     const date = new Date(currentDate.getFullYear(), currentDate.getMonth(), day);
                     const dateISO = dateToISOString(date);
-                    const revisionsDue = revisionMap.get(dateISO);
+                    const itemsDue = itemMap.get(dateISO);
                     const isToday = dateISO === todayISO;
                     const isSelected = selectedDate && dateISO === dateToISOString(selectedDate);
                     
-                    const hasItems = revisionsDue && revisionsDue.length > 0;
+                    const hasItems = itemsDue && itemsDue.length > 0;
                     
                     const cellClasses = `h-20 flex flex-col items-center justify-center p-1 rounded-lg transition-colors cursor-pointer 
-                                         ${isToday ? 'bg-blue-100 border-2 border-blue-500' : 'bg-gray-50 hover:bg-gray-200'}
-                                         ${isSelected ? 'bg-purple-200 border-purple-500' : ''}`;
+                                         ${isToday ? 'bg-blue-100 border-2 border-blue-500 dark:bg-blue-900/30' : 'bg-gray-50 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600'}
+                                         ${isSelected ? 'bg-purple-200 border-purple-500 dark:bg-purple-900/30' : ''}`;
 
                     return (
                         <div key={day} className={cellClasses} onClick={() => handleDayClick(day)}>
-                            <span className={`font-semibold ${isToday ? 'text-blue-700' : 'text-gray-800'} text-lg`}>{day}</span>
+                            <span className={`font-semibold ${isToday ? 'text-blue-700 dark:text-blue-300' : 'text-gray-800 dark:text-gray-200'} text-lg`}>{day}</span>
                             {hasItems && (
-                                <span className={`text-xs mt-1 px-2 py-0.5 rounded-full font-bold ${revisionsDue.some(r => r.isMissed) ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}>
-                                    {revisionsDue.length} Due
+                                <span className={`text-xs mt-1 px-2 py-0.5 rounded-full font-bold ${itemsDue.some(r => r.isMissed) ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}>
+                                    {itemsDue.length} {isTaskView ? 'Due' : 'Due'}
                                 </span>
                             )}
                         </div>
@@ -1061,30 +1175,30 @@ const CalendarView = ({ topics, allSubjects }) => {
 
             <Modal 
                 isOpen={modalOpen} 
-                onClose={() => setModalOpen(false)} 
-                title={`Schedule for ${dateToString(selectedDate)}`}
+                onClose={() => setSelectedDate(null)} 
+                title={`${isTaskView ? 'Tasks' : 'Schedule'} for ${dateToString(selectedDate)}`}
                 size="sm:max-w-xl"
             >
-                {selectedDate && revisionMap.has(dateToISOString(selectedDate)) ? (
+                {selectedDate && itemMap.has(dateToISOString(selectedDate)) ? (
                     <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
-                        {revisionMap.get(dateToISOString(selectedDate)).map((revision, index) => (
+                        {itemMap.get(dateToISOString(selectedDate)).map((item, index) => (
                             <div 
                                 key={index} 
                                 className={`p-3 rounded-lg shadow-sm border-l-4 
-                                    ${revision.isMissed ? 'bg-red-50 border-red-500' : revision.type === 'Task' ? 'bg-purple-50 border-purple-500' : 'bg-green-50 border-green-500'}`}
+                                    ${item.isMissed ? 'bg-red-50 border-red-500 dark:bg-red-900/20 dark:border-red-800' : item.type === 'Task' ? 'bg-purple-50 border-purple-500 dark:bg-purple-900/20 dark:border-purple-800' : 'bg-green-50 border-green-500 dark:bg-green-900/20 dark:border-green-800'}`}
                             >
-                                <p className="font-semibold text-gray-800">{revision.topicName}</p>
-                                <div className="flex justify-between text-sm text-gray-600">
-                                    <span>Subject: {revision.subjectName}</span>
+                                <p className="font-semibold text-gray-800 dark:text-gray-200">{item.topicName}</p>
+                                <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400">
+                                    <span>Subject: {item.subjectName}</span>
                                     <span className="font-bold">
-                                        {revision.isMissed ? '(MISSED)' : revision.type === 'Task' ? '(TASK DUE)' : '(REVISION DUE)'}
+                                        {item.isMissed ? '(MISSED)' : item.type === 'Task' ? '(TASK DUE)' : '(REVISION DUE)'}
                                     </span>
                                 </div>
                             </div>
                         ))}
                     </div>
                 ) : (
-                    <p className="text-gray-500">Nothing scheduled for this date. Go enjoy the break!</p>
+                    <p className="text-gray-500 dark:text-gray-400">Nothing scheduled for this date. Go enjoy the break!</p>
                 )}
             </Modal>
         </div>
@@ -1097,6 +1211,13 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
     const [activeSection, setActiveSection] = useState('revision');
     const [activeRevisionTab, setActiveRevisionTab] = useState('dashboard');
     const [activeTaskTab, setActiveTaskTab] = useState('today');
+    const [darkMode, setDarkMode] = useState(() => {
+        if (typeof window !== 'undefined') {
+            const saved = localStorage.getItem('darkMode');
+            return saved !== null ? JSON.parse(saved) : false;
+        }
+        return false;
+    });
 
     const [isAddTopicModalOpen, setIsAddTopicModalOpen] = useState(false);
     const [isAddSubjectModalOpen, setIsAddSubjectModalOpen] = useState(false);
@@ -1106,6 +1227,11 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
     const [topicToEdit, setTopicToEdit] = useState(null); 
     const [isEditTopicModalOpen, setIsEditTopicModalOpen] = useState(false); 
     const [isTimerModalOpen, setIsTimerModalOpen] = useState(false);
+
+    const [isManageRevisionSubjectsOpen, setIsManageRevisionSubjectsOpen] = useState(false);
+    const [isManageTaskSubjectsOpen, setIsManageTaskSubjectsOpen] = useState(false);
+    const [editingSubject, setEditingSubject] = useState(null);
+    const [isEditSubjectModalOpen, setIsEditSubjectModalOpen] = useState(false);
 
     const [confirmAction, setConfirmAction] = useState({
         isOpen: false,
@@ -1117,6 +1243,15 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
 
     const [selectedSubjectFilter, setSelectedSubjectFilter] = useState('all');
     const [userName, setUserName] = useState('');
+
+    useEffect(() => {
+        if (typeof document !== 'undefined') {
+            document.documentElement.classList.remove('dark');
+            if (darkMode) {
+                document.documentElement.classList.add('dark');
+            }
+        }
+    }, [darkMode]);
 
     useEffect(() => {
         if (userId) {
@@ -1145,6 +1280,11 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
             console.error("Error saving user name:", error);
         }
     }, [userId]);
+
+    const handleEditSubject = useCallback((subject) => {
+        setEditingSubject(subject);
+        setIsEditSubjectModalOpen(true);
+    }, []);
 
     const AddSubjectForm = ({ userId, onClose, subjectCollectionGetter }) => {
         const [name, setName] = useState('');
@@ -1179,7 +1319,7 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Subject Name (e.g., Data Structures, Math)"
                     required
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 mb-4"
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 mb-4 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200 dark:placeholder-gray-400"
                     disabled={loading}
                 />
                 <div className="flex justify-end space-x-2">
@@ -1458,24 +1598,16 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
     const taskTabCounts = useMemo(() => {
         const allTasks = getTaskTopics;
         const activeTasks = allTasks.filter(t => !t.isComplete);
+        const completedTasks = allTasks.filter(t => t.isComplete);
 
-        const todayTasks = allTasks.filter(t => t.taskDueDate && t.taskDueDate <= TODAY_MS);
-        const weeklyTasks = allTasks.filter(t => t.taskDueDate && t.taskDueDate >= START_OF_WEEK_MS && t.taskDueDate <= END_OF_WEEK_MS);
-        
         return {
             today: activeTasks.filter(t => t.taskDueDate && t.taskDueDate <= TODAY_MS).length,
             tomorrow: activeTasks.filter(t => t.taskDueDate && t.taskDueDate === TOMORROW_MS).length,
             upcoming: activeTasks.filter(t => t.taskDueDate && t.taskDueDate > TOMORROW_MS).length,
             recommended: activeTasks.filter(t => !t.taskDueDate).length,
             totalActive: activeTasks.length,
-            totalCompleted: allTasks.filter(t => t.isComplete).length,
+            totalCompleted: completedTasks.length,
             total: allTasks.length,
-            
-            todayTotal: todayTasks.length,
-            todayCompleted: todayTasks.filter(t => t.isComplete).length,
-            
-            weeklyTotal: weeklyTasks.length,
-            weeklyCompleted: weeklyTasks.filter(t => t.isComplete).length,
         }
     }, [getTaskTopics]);
     
@@ -1506,7 +1638,7 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
 
     const tabClasses = (tab, currentActive) => (
         `flex-1 text-center py-2 font-semibold transition-colors rounded-t-lg text-xs sm:text-sm 
-        ${currentActive === tab ? 'bg-white shadow-inner text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-blue-500'}`
+        ${currentActive === tab ? 'bg-white shadow-inner text-blue-600 border-b-2 border-blue-600 dark:bg-gray-800 dark:text-blue-400 dark:border-blue-500' : 'text-gray-600 hover:text-blue-500 dark:text-gray-400 dark:hover:text-blue-400'}`
     );
 
     const TopicCard = ({ topic, subjectName, onMarkDone, onShift, onDelete, onEdit }) => {
@@ -1565,31 +1697,31 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
         }
 
         return (
-            <div className={`bg-white border-l-4 ${cardBorder} rounded-xl shadow-lg p-5 flex flex-col space-y-3`}>
+            <div className={`bg-white border-l-4 ${cardBorder} rounded-xl shadow-lg p-5 flex flex-col space-y-3 dark:bg-gray-800 dark:border-gray-700`}>
                 <div className="flex justify-between items-start">
                     <div>
-                        <h4 className="text-xl font-bold text-gray-800">{topic.name}</h4>
+                        <h4 className="text-xl font-bold text-gray-800 dark:text-gray-200">{topic.name}</h4>
                         <div className="flex flex-wrap gap-2 mt-1">
-                            <span className="text-sm font-medium text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full inline-block">
+                            <span className="text-sm font-medium text-purple-600 bg-purple-100 px-2 py-0.5 rounded-full inline-block dark:text-purple-400 dark:bg-purple-900/30">
                                 {subjectName}
                             </span>
-                            <span className="text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full inline-block">
+                            <span className="text-xs font-semibold text-gray-700 bg-gray-100 px-2 py-0.5 rounded-full inline-block dark:text-gray-300 dark:bg-gray-700">
                                 {typeBadge}
                             </span>
                         </div>
-                        <p className="text-xs text-gray-500 mt-2">
-                            {topic.type === 'revision' ? 'First Studied:' : 'Created/Due:'} <span className="font-semibold text-gray-700">{initialStudyDate}</span>
+                        <p className="text-xs text-gray-500 mt-2 dark:text-gray-400">
+                            {topic.type === 'revision' ? 'First Studied:' : 'Created/Due:'} <span className="font-semibold text-gray-700 dark:text-gray-300">{initialStudyDate}</span>
                         </p>
                     </div>
                     <div className={`text-right text-sm font-semibold ${statusColor}`}>
                         {topic.type === 'task' && topic.isComplete ? 'Completed' : statusText}
                         {topic.type === 'revision' && !topic.isComplete && (
-                            <div className="text-xs text-gray-500 mt-1">
+                            <div className="text-xs text-gray-500 mt-1 dark:text-gray-400">
                                 Rev: {completedRevisions}/{totalRevisions}
                             </div>
                         )}
                         {topic.type === 'task' && nextDate && !topic.isComplete && (
-                             <div className="text-xs text-gray-500 mt-1">
+                             <div className="text-xs text-gray-500 mt-1 dark:text-gray-400">
                                  Due: {dateToString(nextDate)}
                              </div>
                         )}
@@ -1597,13 +1729,13 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
                 </div>
 
                 {hasSubtopics && (
-                    <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 max-h-40 overflow-y-auto">
-                        <h5 className="text-xs font-bold text-gray-600 mb-2 border-b pb-1">Problems ({topic.subtopics.length})</h5>
+                    <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 max-h-40 overflow-y-auto dark:bg-gray-700 dark:border-gray-600">
+                        <h5 className="text-xs font-bold text-gray-600 mb-2 border-b pb-1 dark:text-gray-400 dark:border-gray-500">Problems ({topic.subtopics.length})</h5>
                         <ul className="space-y-1">
                             {topic.subtopics.map((sub, index) => (
-                                <li key={index} className="flex justify-between text-sm text-gray-800">
+                                <li key={index} className="flex justify-between text-sm text-gray-800 dark:text-gray-200">
                                     <span className="font-medium truncate">{sub.name}</span>
-                                    <span className="text-xs font-mono bg-gray-200 px-2 rounded-full text-gray-700 ml-2 flex-shrink-0">
+                                    <span className="text-xs font-mono bg-gray-200 px-2 rounded-full text-gray-700 ml-2 flex-shrink-0 dark:bg-gray-600 dark:text-gray-300">
                                         {sub.number || 'No #'}
                                     </span>
                                 </li>
@@ -1614,7 +1746,7 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
                 
                  {topic.type === 'revision' && (
                     <div className="pt-2">
-                        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div className="h-2 bg-gray-200 rounded-full overflow-hidden dark:bg-gray-600">
                             <div
                                 className={`h-full bg-green-500 transition-all duration-500`}
                                 style={{ width: `${progressPercent}%` }}
@@ -1623,7 +1755,7 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
                     </div>
                  )}
 
-                <div className="flex space-x-2 pt-2 border-t border-gray-100">
+                <div className="flex space-x-2 pt-2 border-t border-gray-100 dark:border-gray-700">
                     {!isComplete && (
                         <Button 
                             variant="success" 
@@ -1659,6 +1791,7 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
             list = list.filter(t => t.subjectId === selectedSubjectFilter);
         }
 
+        let content = null;
         switch (activeRevisionTab) {
             case 'pending':
                 list = list.filter(t => t.isPending && !t.isMissed);
@@ -1670,51 +1803,42 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
                 list = list.filter(t => t.isDone && !t.isComplete);
                 break;
             case 'calendar':
-                return (
-                    <>
-                        <div className="bg-white p-4 rounded-xl shadow-lg mb-6">
-                            <h3 className="text-lg font-semibold text-gray-700 mb-3">Filter Subjects:</h3>
-                            <div className="flex flex-wrap gap-2">
-                                <Button
-                                    variant={selectedSubjectFilter === 'all' ? 'primary' : 'secondary'}
-                                    onClick={() => setSelectedSubjectFilter('all')}
-                                    className="text-sm px-3 py-1.5"
-                                >
-                                    All
-                                </Button>
-                                {currentSubjects.map(subject => (
-                                    <Button
-                                        key={subject.id}
-                                        variant={selectedSubjectFilter === subject.id ? 'info' : 'secondary'}
-                                        onClick={() => setSelectedSubjectFilter(subject.id)}
-                                        className="text-sm px-3 py-1.5"
-                                    >
-                                        {subject.name}
-                                    </Button>
-                                ))}
-                                {selectedSubjectFilter !== 'all' && (
-                                    <Button
-                                        variant="secondary"
-                                        onClick={() => setSelectedSubjectFilter('all')}
-                                        className="text-sm px-3 py-1.5 text-red-600 hover:bg-red-100 bg-red-50 border border-red-200"
-                                    >
-                                        Clear Filter
-                                    </Button>
-                                )}
-                            </div>
-                        </div>
-                        <CalendarView topics={revisionTopics} allSubjects={allSubjects} />
-                    </>
-                );
+                content = <CalendarView topics={revisionTopics} allSubjects={allSubjects} />;
+                break;
             case 'dashboard':
             default:
                 break;
         }
 
+        if (!content) {
+            content = (
+                <div className="grid md:grid-cols-2 gap-6">
+                    {list.length > 0 ? (
+                        list.map(topic => (
+                            <TopicCard
+                                key={topic.id}
+                                topic={topic}
+                                subjectName={topic.subjectName}
+                                onMarkDone={handleMarkDoneClick}
+                                onShift={handleShift}
+                                onDelete={handleDeleteClick}
+                                onEdit={handleOpenEditModal}
+                            />
+                        ))
+                    ) : (
+                        <div className="col-span-2 bg-white p-8 rounded-xl shadow-lg text-center text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                            <h3 className="text-2xl font-semibold mb-2 dark:text-gray-200">No Revision Topics Here</h3>
+                            <p>Add a new item or clear your filter.</p>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
         return (
             <>
-                <div className="bg-white p-4 rounded-xl shadow-lg mb-6">
-                    <h3 className="text-lg font-semibold text-gray-700 mb-3">Filter Subjects:</h3>
+                <div className="bg-white p-4 rounded-xl shadow-lg mb-6 dark:bg-gray-800">
+                    <h3 className="text-lg font-semibold text-gray-700 mb-3 dark:text-gray-300">Filter Subjects:</h3>
                     <div className="flex flex-wrap gap-2">
                         <Button
                             variant={selectedSubjectFilter === 'all' ? 'primary' : 'secondary'}
@@ -1737,15 +1861,24 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
                             <Button
                                 variant="secondary"
                                 onClick={() => setSelectedSubjectFilter('all')}
-                                className="text-sm px-3 py-1.5 text-red-600 hover:bg-red-100 bg-red-50 border border-red-200"
+                                className="text-sm px-3 py-1.5 text-red-600 hover:bg-red-100 bg-red-50 border border-red-200 dark:text-red-400 dark:hover:bg-red-900/30 dark:bg-red-900/20 dark:border-red-800"
                             >
                                 Clear Filter
                             </Button>
                         )}
                     </div>
                 </div>
+                <div className="mt-4 flex justify-center mb-6">
+                    <Button 
+                        variant="outline" 
+                        onClick={() => setIsManageRevisionSubjectsOpen(true)} 
+                        className="text-sm px-4"
+                    >
+                        <Edit className="w-4 h-4 mr-2" /> Manage Revision Subjects
+                    </Button>
+                </div>
 
-                <div className="flex border-b border-gray-200 mb-6 sticky top-[170px] sm:top-[80px] bg-gray-50 z-10">
+                <div className="flex border-b border-gray-200 mb-6 sticky top-[170px] sm:top-[80px] bg-gray-50 z-10 dark:bg-gray-700 dark:border-gray-600">
                     <button onClick={() => setActiveRevisionTab('dashboard')} className={tabClasses('dashboard', activeRevisionTab)}>
                         <LayoutDashboard className="w-4 h-4 mx-auto mb-1" /> Dashboard
                     </button>
@@ -1763,26 +1896,7 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
                     </button>
                 </div>
                 
-                <div className="grid md:grid-cols-2 gap-6">
-                    {list.length > 0 ? (
-                        list.map(topic => (
-                            <TopicCard
-                                key={topic.id}
-                                topic={topic}
-                                subjectName={topic.subjectName}
-                                onMarkDone={handleMarkDoneClick}
-                                onShift={handleShift}
-                                onDelete={handleDeleteClick}
-                                onEdit={handleOpenEditModal}
-                            />
-                        ))
-                    ) : (
-                        <div className="col-span-2 bg-white p-8 rounded-xl shadow-lg text-center text-gray-500">
-                            <h3 className="text-2xl font-semibold mb-2">No Revision Topics Here</h3>
-                            <p>Add a new item or clear your filter.</p>
-                        </div>
-                    )}
-                </div>
+                {content}
             </>
         );
     };
@@ -1812,6 +1926,8 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
                     return list.filter(t => !t.taskDueDate);
                 case 'completed':
                     return completedTasks.filter(t => selectedSubjectFilter === 'all' || t.subjectId === selectedSubjectFilter);
+                case 'calendar':
+                    return null;
                 default:
                     return list;
             }
@@ -1834,51 +1950,57 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
             return Array.from(groupedTasks.values()).sort((a, b) => new Date(b.date) - new Date(a.date));
         }, [filteredList]);
 
-        
-        const todayTasks = getTaskTopics.filter(t => t.taskDueDate && t.taskDueDate <= TODAY_MS);
-        const todayTotal = todayTasks.length;
-        const todayCompleted = todayTasks.filter(t => t.isComplete).length;
-        const todayCompletionRate = todayTotal > 0 ? (todayCompleted / todayTotal) * 100 : 0;
+        // Fixed calculations: strictly due today and this week
+        const todayPending = activeTasks.filter(t => t.taskDueDate && t.taskDueDate === TODAY_MS).length;
+        const todayCompletedCount = completedTasks.filter(t => t.taskDueDate && t.taskDueDate === TODAY_MS).length;
+        const todayTotal = todayPending + todayCompletedCount;
+        const todayDone = todayCompletedCount;
+        const todayLeft = todayPending;
+        const todayCompletionRate = todayTotal > 0 ? (todayDone / todayTotal) * 100 : 0;
 
-        const weeklyTasks = getTaskTopics.filter(t => t.taskDueDate && t.taskDueDate >= START_OF_WEEK_MS && t.taskDueDate <= END_OF_WEEK_MS);
-        const weeklyTotal = weeklyTasks.length;
-        const weeklyCompleted = weeklyTasks.filter(t => t.isComplete).length;
-        const weeklyCompletionRate = weeklyTotal > 0 ? (weeklyCompleted / weeklyTotal) * 100 : 0;
+        const weeklyPending = activeTasks.filter(t => t.taskDueDate && t.taskDueDate >= START_OF_WEEK_MS && t.taskDueDate <= END_OF_WEEK_MS).length;
+        const weeklyCompletedCount = completedTasks.filter(t => t.taskDueDate && t.taskDueDate >= START_OF_WEEK_MS && t.taskDueDate <= END_OF_WEEK_MS).length;
+        const weeklyTotal = weeklyPending + weeklyCompletedCount;
+        const weeklyDone = weeklyCompletedCount;
+        const weeklyLeft = weeklyPending;
+        const weeklyCompletionRate = weeklyTotal > 0 ? (weeklyDone / weeklyTotal) * 100 : 0;
 
         const CircularProgress = ({ percentage, size = 80 }) => {
             const radius = (size - 8) / 2;
             const circumference = 2 * Math.PI * radius;
-            const offset = circumference - (percentage / 100) * circumference;
+            const offset = circumference * (1 - percentage / 100);
             
             return (
-                <svg width={size} height={size} className="transform -rotate-90">
+                <svg width={size} height={size} className="transform -rotate-90" viewBox={`0 0 ${size} ${size}`}>
                     <circle
                         cx={size / 2}
                         cy={size / 2}
                         r={radius}
-                        stroke="#e5e7eb"
+                        stroke="currentColor"
                         strokeWidth="8"
                         fill="none"
+                        strokeDasharray={circumference}
+                        strokeDashoffset={circumference}
+                        className="text-gray-200 dark:text-gray-600"
                     />
                     <circle
                         cx={size / 2}
                         cy={size / 2}
                         r={radius}
-                        stroke="#10b981"
+                        stroke="currentColor"
                         strokeWidth="8"
                         fill="none"
                         strokeDasharray={circumference}
                         strokeDashoffset={offset}
                         strokeLinecap="round"
-                        className="transition-all duration-500"
+                        className="transition-all duration-500 text-green-500"
                     />
                     <text
-                        x="50%"
-                        y="50%"
+                        x={size / 2}
+                        y={size / 2}
                         textAnchor="middle"
                         dy=".3em"
-                        className="text-xl font-bold fill-gray-800 transform rotate-90"
-                        style={{ transform: 'rotate(90deg)', transformOrigin: 'center' }}
+                        className="text-xl font-bold fill-current text-gray-800 dark:text-gray-200"
                     >
                         {Math.round(percentage)}%
                     </text>
@@ -1886,51 +2008,113 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
             );
         };
 
-        const SectionTitle = ({ dateMs, fallbackText }) => {
-            if (activeTaskTab === 'recommended') {
-                return <h3 className="text-xl font-bold text-gray-800 mb-4">{fallbackText}</h3>
-            }
-            if (dateMs === TODAY_MS) {
-                return <h3 className="text-xl font-bold text-gray-800 mb-4">Today's Tasks & Overdue</h3>;
-            }
-            if (dateMs === TOMORROW_MS) {
-                return <h3 className="text-xl font-bold text-gray-800 mb-4">Tomorrow's Tasks</h3>;
-            }
-            return <h3 className="text-xl font-bold text-gray-800 mb-4">{fallbackText}</h3>;
-        };
+        let content = null;
+        if (activeTaskTab === 'completed') {
+            content = (
+                <div className="space-y-6">
+                    {CompletedTasksView.length > 0 ? (
+                        CompletedTasksView.map(group => (
+                            <div key={group.date} className="bg-white p-5 rounded-xl shadow-lg border-l-4 border-green-500 dark:bg-gray-800 dark:border-green-700">
+                                <h4 className="text-xl font-bold text-green-700 mb-3 border-b pb-2 dark:text-green-300 dark:border-green-600">Completed: {group.date}</h4>
+                                <div className="space-y-3">
+                                    {group.tasks.map(task => (
+                                        <div key={task.id} className="p-3 bg-green-50 rounded-lg flex justify-between items-center border border-green-200 dark:bg-green-900/20 dark:border-green-800">
+                                            <p className="font-medium text-gray-800 dark:text-gray-200">{task.name}</p>
+                                            <span className="text-sm text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full dark:text-gray-400 dark:bg-gray-700">
+                                                {task.subjectName}
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                         <div className="col-span-2 bg-white p-8 rounded-xl shadow-lg text-center text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                            <h3 className="text-2xl font-semibold mb-2 dark:text-gray-200">No Completed Tasks</h3>
+                            <p>Mark some tasks done to see your progress here!</p>
+                        </div>
+                    )}
+                </div>
+            );
+        } else if (activeTaskTab === 'calendar') {
+            content = <CalendarView topics={getTaskTopics} allSubjects={allSubjects} isTaskView={true} />;
+        } else {
+            const SectionTitle = ({ fallbackText }) => {
+                if (activeTaskTab === 'recommended') {
+                    return <h3 className="text-xl font-bold text-gray-800 mb-4 dark:text-gray-200">{fallbackText}</h3>
+                }
+                if (activeTaskTab === 'today') {
+                    return <h3 className="text-xl font-bold text-gray-800 mb-4 dark:text-gray-200">Today's Tasks & Overdue</h3>;
+                }
+                if (activeTaskTab === 'tomorrow') {
+                    return <h3 className="text-xl font-bold text-gray-800 mb-4 dark:text-gray-200">Tomorrow's Tasks</h3>;
+                }
+                return <h3 className="text-xl font-bold text-gray-800 mb-4 dark:text-gray-200">{fallbackText}</h3>;
+            };
+
+            content = (
+                <>
+                    <SectionTitle 
+                        fallbackText={activeTaskTab === 'upcoming' ? "Upcoming Tasks (After Tomorrow)" : "Recommended Tasks (No Date)"}
+                    />
+                    <div className="grid md:grid-cols-2 gap-6">
+                        {filteredList.length > 0 ? (
+                            filteredList.map(topic => (
+                                <TopicCard
+                                    key={topic.id}
+                                    topic={topic}
+                                    subjectName={topic.subjectName}
+                                    onMarkDone={handleMarkDoneClick}
+                                    onShift={() => {}}
+                                    onDelete={handleDeleteClick}
+                                    onEdit={handleOpenEditModal}
+                                />
+                            ))
+                        ) : (
+                            <div className="col-span-2 bg-white p-8 rounded-xl shadow-lg text-center text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+                                <h3 className="text-2xl font-semibold mb-2 dark:text-gray-200">No Tasks Found</h3>
+                                <p>You are all caught up for this section!</p>
+                            </div>
+                        )}
+                    </div>
+                </>
+            );
+        }
 
         return (
             <>
-                <div className="bg-white p-4 rounded-xl shadow-lg mb-6 border-b-4 border-blue-600">
+                <div className="bg-white p-4 rounded-xl shadow-lg mb-6 border-b-4 border-blue-600 dark:bg-gray-800 dark:border-blue-500">
                     <div className="mb-4">
-                        <h3 className="text-2xl font-bold text-gray-800">Study Task Summary</h3>
-                        <p className="text-sm text-gray-500 mt-1">
+                        <h3 className="text-2xl font-bold text-gray-800 dark:text-gray-200">Study Task Summary</h3>
+                        <p className="text-sm text-gray-500 mt-1 dark:text-gray-400">
                             Active: {taskTabCounts.totalActive} | Completed: {taskTabCounts.totalCompleted} | Total: {taskTabCounts.total}
                         </p>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-4">
-                        <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 flex items-center justify-between">
+                        <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 flex items-center justify-between dark:bg-blue-900/20 dark:border-blue-800">
                             <div>
-                                <p className="text-sm font-semibold text-blue-800">Today's Tasks</p>
-                                <h4 className="text-3xl font-bold text-gray-800 mt-1">{todayCompleted} / {todayTotal}</h4>
-                                <p className="text-xs text-gray-600 mt-1">Completion Rate</p>
+                                <p className="text-sm font-semibold text-blue-800 dark:text-blue-200">Today's Tasks</p>
+                                <h4 className="text-3xl font-bold text-gray-800 mt-1 dark:text-gray-200">{todayTotal}</h4>
+                                <p className="text-xs text-gray-600 mt-1 dark:text-gray-400">Total</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">Done: {todayDone} | Left: {todayLeft}</p>
                             </div>
                             <CircularProgress percentage={todayCompletionRate} size={70} />
                         </div>
-                         <div className="p-4 bg-purple-50 rounded-lg border border-purple-200 flex items-center justify-between">
+                         <div className="p-4 bg-purple-50 rounded-lg border border-purple-200 flex items-center justify-between dark:bg-purple-900/20 dark:border-purple-800">
                             <div>
-                                <p className="text-sm font-semibold text-purple-800">This Week</p>
-                                <h4 className="text-3xl font-bold text-gray-800 mt-1">{weeklyCompleted} / {weeklyTotal}</h4>
-                                <p className="text-xs text-gray-600 mt-1">Completion Rate</p>
+                                <p className="text-sm font-semibold text-purple-800 dark:text-purple-200">This Week</p>
+                                <h4 className="text-3xl font-bold text-gray-800 mt-1 dark:text-gray-200">{weeklyTotal}</h4>
+                                <p className="text-xs text-gray-600 mt-1 dark:text-gray-400">Total</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">Done: {weeklyDone} | Left: {weeklyLeft}</p>
                             </div>
                             <CircularProgress percentage={weeklyCompletionRate} size={70} />
                         </div>
                     </div>
                 </div>
 
-                 <div className="bg-white p-4 rounded-xl shadow-lg mb-6">
-                    <h3 className="text-lg font-semibold text-gray-700 mb-3">Filter Subjects:</h3>
+                 <div className="bg-white p-4 rounded-xl shadow-lg mb-6 dark:bg-gray-800">
+                    <h3 className="text-lg font-semibold text-gray-700 mb-3 dark:text-gray-300">Filter Subjects:</h3>
                     <div className="flex flex-wrap gap-2">
                         <Button
                             variant={selectedSubjectFilter === 'all' ? 'primary' : 'secondary'}
@@ -1953,15 +2137,24 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
                             <Button
                                 variant="secondary"
                                 onClick={() => setSelectedSubjectFilter('all')}
-                                className="text-sm px-3 py-1.5 text-red-600 hover:bg-red-100 bg-red-50 border border-red-200"
+                                className="text-sm px-3 py-1.5 text-red-600 hover:bg-red-100 bg-red-50 border border-red-200 dark:text-red-400 dark:hover:bg-red-900/30 dark:bg-red-900/20 dark:border-red-800"
                             >
                                 Clear Filter
                             </Button>
                         )}
                     </div>
                 </div>
+                <div className="mt-4 flex justify-center mb-6">
+                    <Button 
+                        variant="outline" 
+                        onClick={() => setIsManageTaskSubjectsOpen(true)} 
+                        className="text-sm px-4"
+                    >
+                        <Edit className="w-4 h-4 mr-2" /> Manage Task Subjects
+                    </Button>
+                </div>
 
-                <div className="flex border-b border-gray-200 mb-6 sticky top-[170px] sm:top-[80px] bg-gray-50 z-10">
+                <div className="flex border-b border-gray-200 mb-6 sticky top-[170px] sm:top-[80px] bg-gray-50 z-10 dark:bg-gray-700 dark:border-gray-600">
                     <button onClick={() => setActiveTaskTab('today')} className={tabClasses('today', activeTaskTab)}>
                         <Clock className="w-4 h-4 mx-auto mb-1" /> Today/Overdue ({taskTabCounts.today})
                     </button>
@@ -1977,61 +2170,12 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
                      <button onClick={() => setActiveTaskTab('completed')} className={tabClasses('completed', activeTaskTab)}>
                         <CheckCircle className="w-4 h-4 mx-auto mb-1" /> Completed ({taskTabCounts.totalCompleted})
                     </button>
+                    <button onClick={() => setActiveTaskTab('calendar')} className={tabClasses('calendar', activeTaskTab)}>
+                        <Calendar className="w-4 h-4 mx-auto mb-1" /> Calendar
+                    </button>
                 </div>
                 
-                {activeTaskTab !== 'completed' ? (
-                    <>
-                        <SectionTitle 
-                            dateMs={activeTaskTab === 'today' ? TODAY_MS : activeTaskTab === 'tomorrow' ? TOMORROW_MS : null}
-                            fallbackText={activeTaskTab === 'upcoming' ? "Upcoming Tasks (After Tomorrow)" : "Recommended Tasks (No Date)"}
-                        />
-                        <div className="grid md:grid-cols-2 gap-6">
-                            {filteredList.length > 0 ? (
-                                filteredList.map(topic => (
-                                    <TopicCard
-                                        key={topic.id}
-                                        topic={topic}
-                                        subjectName={topic.subjectName}
-                                        onMarkDone={handleMarkDoneClick}
-                                        onShift={() => {}}
-                                        onDelete={handleDeleteClick}
-                                        onEdit={handleOpenEditModal}
-                                    />
-                                ))
-                            ) : (
-                                <div className="col-span-2 bg-white p-8 rounded-xl shadow-lg text-center text-gray-500">
-                                    <h3 className="text-2xl font-semibold mb-2">No Tasks Found</h3>
-                                    <p>You are all caught up for this section!</p>
-                                </div>
-                            )}
-                        </div>
-                    </>
-                ) : (
-                    <div className="space-y-6">
-                        {CompletedTasksView.length > 0 ? (
-                            CompletedTasksView.map(group => (
-                                <div key={group.date} className="bg-white p-5 rounded-xl shadow-lg border-l-4 border-green-500">
-                                    <h4 className="text-xl font-bold text-green-700 mb-3 border-b pb-2">Completed: {group.date}</h4>
-                                    <div className="space-y-3">
-                                        {group.tasks.map(task => (
-                                            <div key={task.id} className="p-3 bg-green-50 rounded-lg flex justify-between items-center border border-green-200">
-                                                <p className="font-medium text-gray-800">{task.name}</p>
-                                                <span className="text-sm text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">
-                                                    {task.subjectName}
-                                                </span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            ))
-                        ) : (
-                             <div className="col-span-2 bg-white p-8 rounded-xl shadow-lg text-center text-gray-500">
-                                <h3 className="text-2xl font-semibold mb-2">No Completed Tasks</h3>
-                                <p>Mark some tasks done to see your progress here!</p>
-                            </div>
-                        )}
-                    </div>
-                )}
+                {content}
             </>
         );
     };
@@ -2154,31 +2298,31 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
 
         return (
             <div className="space-y-8">
-                <h2 className="text-3xl font-bold text-gray-800 flex items-center mb-6">
+                <h2 className="text-3xl font-bold text-gray-800 flex items-center mb-6 dark:text-gray-200">
                     <BarChart3 className="w-6 h-6 mr-3" /> Performance Analytics
                 </h2>
 
                 <div className="grid md:grid-cols-3 gap-4">
-                    <div className="bg-white p-6 rounded-xl shadow-lg border-l-4 border-blue-600">
-                        <p className="text-sm text-gray-500">Overall Items</p>
-                        <h3 className="text-3xl font-bold text-gray-800">{totalItems}</h3>
-                        <p className="text-sm text-green-600 font-semibold">{Math.round(completionRate)}% Completed</p>
+                    <div className="bg-white p-6 rounded-xl shadow-lg border-l-4 border-blue-600 dark:bg-gray-800 dark:border-blue-500">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Overall Items</p>
+                        <h3 className="text-3xl font-bold text-gray-800 dark:text-gray-200">{totalItems}</h3>
+                        <p className="text-sm text-green-600 font-semibold dark:text-green-400">{Math.round(completionRate)}% Completed</p>
                     </div>
-                    <div className="bg-white p-6 rounded-xl shadow-lg border-l-4 border-green-600">
-                        <p className="text-sm text-gray-500">Revision On-Time Rate</p>
-                        <h3 className="text-3xl font-bold text-gray-800">{Math.round(onTimeRate)}%</h3>
-                        <p className="text-sm text-gray-600 font-semibold">{revisionsCompletedOnTime} of {revisionsCompleted} revisions done on time</p>
+                    <div className="bg-white p-6 rounded-xl shadow-lg border-l-4 border-green-600 dark:bg-gray-800 dark:border-green-500">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Revision On-Time Rate</p>
+                        <h3 className="text-3xl font-bold text-gray-800 dark:text-gray-200">{Math.round(onTimeRate)}%</h3>
+                        <p className="text-sm text-gray-600 font-semibold dark:text-gray-300">{revisionsCompletedOnTime} of {revisionsCompleted} revisions done on time</p>
                     </div>
-                    <div className="bg-white p-6 rounded-xl shadow-lg border-l-4 border-yellow-600">
-                        <p className="text-sm text-gray-500">Tasks Active / Complete</p>
-                        <h3 className="text-3xl font-bold text-gray-800">{taskTabCounts.totalActive} / {taskTabCounts.totalCompleted}</h3>
-                        <p className="text-sm text-gray-600 font-semibold">Total active tasks in Todo list.</p>
+                    <div className="bg-white p-6 rounded-xl shadow-lg border-l-4 border-yellow-600 dark:bg-gray-800 dark:border-yellow-500">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Tasks Active / Complete</p>
+                        <h3 className="text-3xl font-bold text-gray-800 dark:text-gray-200">{taskTabCounts.totalActive} / {taskTabCounts.totalCompleted}</h3>
+                        <p className="text-sm text-gray-600 font-semibold dark:text-gray-300">Total active tasks in Todo list.</p>
                     </div>
                 </div>
                 
-                <div className="bg-white p-6 rounded-xl shadow-lg">
-                    <h3 className="text-xl font-bold text-gray-800 mb-4">Revision Stage Breakdown</h3>
-                    <div className="flex justify-between items-end h-64 space-x-2 border-b border-l border-gray-300 pb-2 pl-2">
+                <div className="bg-white p-6 rounded-xl shadow-lg dark:bg-gray-800">
+                    <h3 className="text-xl font-bold text-gray-800 mb-4 dark:text-gray-200">Revision Stage Breakdown</h3>
+                    <div className="flex justify-between items-end h-64 space-x-2 border-b border-l border-gray-300 pb-2 pl-2 dark:border-gray-600">
                         {Object.entries(stageBreakdown).map(([stage, count]) => {
                             const heightPercent = maxStageCount > 0 ? (count / maxStageCount) * 100 : 0;
                             return (
@@ -2189,17 +2333,17 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
                                     >
                                         <span className="text-xs font-bold text-white">{count}</span>
                                     </div>
-                                    <span className="text-xs text-gray-600 mt-2 font-semibold text-center">{stage}</span>
+                                    <span className="text-xs text-gray-600 mt-2 font-semibold text-center dark:text-gray-400">{stage}</span>
                                 </div>
                             );
                         })}
                     </div>
-                    <p className="text-center text-sm text-gray-600 mt-4">Distribution of {revisionTopics.length} topics by current revision stage.</p>
+                    <p className="text-center text-sm text-gray-600 mt-4 dark:text-gray-400">Distribution of {revisionTopics.length} topics by current revision stage.</p>
                 </div>
 
-                <div className="bg-white p-6 rounded-xl shadow-lg">
-                    <h3 className="text-xl font-bold text-gray-800 mb-4">Revision Completion: Last 14 Days (Daily)</h3>
-                    <div className="flex justify-between items-end h-64 space-x-1 border-b border-l border-gray-300 pb-2 pl-2">
+                <div className="bg-white p-6 rounded-xl shadow-lg dark:bg-gray-800">
+                    <h3 className="text-xl font-bold text-gray-800 mb-4 dark:text-gray-200">Revision Completion: Last 14 Days (Daily)</h3>
+                    <div className="flex justify-between items-end h-64 space-x-1 border-b border-l border-gray-300 pb-2 pl-2 dark:border-gray-600">
                         {revisionDailyAnalysis.map((trend, index) => {
                             const maxHeight = Math.max(...revisionDailyAnalysis.map(t => t.totalScheduled), 1);
                             const doneHeight = (trend.totalDone / maxHeight) * 100;
@@ -2221,35 +2365,35 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
                                             {trend.totalDone > 0 && <span className="text-xs font-bold text-white opacity-0 group-hover:opacity-100">{trend.totalDone}</span>}
                                         </div>
                                     </div>
-                                    <span className="text-xs text-gray-500 mt-2">{trend.date}</span>
+                                    <span className="text-xs text-gray-500 mt-2 dark:text-gray-400">{trend.date}</span>
                                 </div>
                             );
                         })}
                     </div>
-                    <p className="text-center text-sm text-gray-600 mt-4">Daily completion rate. (Red = Skipped/Pending, Green = Done)</p>
+                    <p className="text-center text-sm text-gray-600 mt-4 dark:text-gray-400">Daily completion rate. (Red = Skipped/Pending, Green = Done)</p>
                 </div>
                 
-                <div className="bg-white p-6 rounded-xl shadow-lg">
-                    <h3 className="text-xl font-bold text-gray-800 mb-4">Revision Completion: Last 4 Weeks (Weekly)</h3>
+                <div className="bg-white p-6 rounded-xl shadow-lg dark:bg-gray-800">
+                    <h3 className="text-xl font-bold text-gray-800 mb-4 dark:text-gray-200">Revision Completion: Last 4 Weeks (Weekly)</h3>
                     <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
+                        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead className="bg-gray-50 dark:bg-gray-700">
                                 <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Week Starting</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Scheduled</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Done</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Skipped/Pending</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Rate</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">Week Starting</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">Scheduled</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">Done</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">Skipped/Pending</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">Rate</th>
                                 </tr>
                             </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
+                            <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
                                 {revisionWeeklyAnalysis.map((trend, index) => (
                                     <tr key={index}>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{trend.weekLabel}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{trend.totalScheduled}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-semibold">{trend.totalDone}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 font-semibold">{trend.totalSkipped}</td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-600">{Math.round(trend.completionRate)}%</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-200">{trend.weekLabel}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{trend.totalScheduled}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-semibold dark:text-green-400">{trend.totalDone}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 font-semibold dark:text-red-400">{trend.totalSkipped}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-600 dark:text-blue-400">{Math.round(trend.completionRate)}%</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -2257,9 +2401,9 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
                     </div>
                 </div>
 
-                <div className="bg-white p-6 rounded-xl shadow-lg">
-                    <h3 className="text-xl font-bold text-gray-800 mb-4">Daily Task Completion Trends (Last 14 Days)</h3>
-                    <div className="flex justify-between items-end h-64 space-x-1 border-b border-l border-gray-300 pb-2 pl-2">
+                <div className="bg-white p-6 rounded-xl shadow-lg dark:bg-gray-800">
+                    <h3 className="text-xl font-bold text-gray-800 mb-4 dark:text-gray-200">Daily Task Completion Trends (Last 14 Days)</h3>
+                    <div className="flex justify-between items-end h-64 space-x-1 border-b border-l border-gray-300 pb-2 pl-2 dark:border-gray-600">
                         {taskCompletionTrends.map((trend, index) => {
                             const heightPercent = trend.completionRate;
                             return (
@@ -2270,42 +2414,42 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
                                     >
                                         <span className="text-xs font-bold text-white opacity-0 group-hover:opacity-100">{trend.completionRate}%</span>
                                     </div>
-                                    <span className="text-xs text-green-600 mt-2 font-semibold">{trend.completedCount}/{trend.totalDue}</span>
-                                    <span className={`text-xs text-gray-500 mt-1 ${index % 3 === 0 ? '' : 'hidden sm:inline'}`}>{trend.date}</span>
+                                    <span className="text-xs text-green-600 mt-2 font-semibold dark:text-green-400">{trend.completedCount}/{trend.totalDue}</span>
+                                    <span className={`text-xs text-gray-500 mt-1 ${index % 3 === 0 ? '' : 'hidden sm:inline'} dark:text-gray-400`}>{trend.date}</span>
                                 </div>
                             );
                         })}
                     </div>
-                    <p className="text-center text-sm text-gray-600 mt-4">Bar height = Completion Rate of tasks due on that day.</p>
+                    <p className="text-center text-sm text-gray-600 mt-4 dark:text-gray-400">Bar height = Completion Rate of tasks due on that day.</p>
                 </div>
 
-                <div className="bg-white p-6 rounded-xl shadow-lg">
-                    <h3 className="text-xl font-bold text-gray-800 mb-4">Subject On-Time Success Rate (Revisions)</h3>
+                <div className="bg-white p-6 rounded-xl shadow-lg dark:bg-gray-800">
+                    <h3 className="text-xl font-bold text-gray-800 mb-4 dark:text-gray-200">Subject On-Time Success Rate (Revisions)</h3>
                     {subjectPerformance.length > 0 ? (
                         <div className="overflow-x-auto">
-                            <table className="min-w-full divide-y divide-gray-200">
-                                <thead className="bg-gray-50">
+                            <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                <thead className="bg-gray-50 dark:bg-gray-700">
                                     <tr>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Completed On Time</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Completed</th>
-                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">On-Time Rate</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">Subject</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">Completed On Time</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">Total Completed</th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider dark:text-gray-400">On-Time Rate</th>
                                     </tr>
                                 </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
+                                <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-800 dark:divide-gray-700">
                                     {subjectPerformance.map(subject => (
                                         <tr key={subject.name}>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{subject.name}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{subject.completedOnTime}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{subject.totalCompleted}</td>
-                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-600">{Math.round(subject.successRate)}%</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-gray-200">{subject.name}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{subject.completedOnTime}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{subject.totalCompleted}</td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-600 dark:text-green-400">{Math.round(subject.successRate)}%</td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
                         </div>
                     ) : (
-                        <p className="text-gray-500">No past revision data available to generate subject analysis.</p>
+                        <p className="text-gray-500 dark:text-gray-400">No past revision data available to generate subject analysis.</p>
                     )}
                 </div>
 
@@ -2313,40 +2457,55 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
         );
     };
 
+    const toggleDarkMode = useCallback(() => {
+        const newMode = !darkMode;
+        setDarkMode(newMode);
+        if (typeof window !== 'undefined') {
+            localStorage.setItem('darkMode', newMode);
+        }
+    }, [darkMode]);
+
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col">
-            <header className="bg-white shadow-md p-4 sticky top-0 z-20">
+        <div className="min-h-screen bg-gray-50 flex flex-col dark:bg-gray-900">
+            <header className="bg-white shadow-md p-4 sticky top-0 z-20 dark:bg-gray-800">
                 <div className="max-w-6xl mx-auto flex flex-col gap-2">
                     <div className="flex justify-between items-center w-full">
-                        <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800">
+                        <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-800 dark:text-gray-200">
                             Welcome, {userName}!
                         </h1>
                         <div className="flex space-x-2 sm:space-x-3 items-center flex-shrink-0">
                             <Button 
                                 variant="outline"
+                                onClick={toggleDarkMode}
+                                className="flex items-center text-xs sm:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-300"
+                            >
+                                {darkMode ? <Sun className="w-4 h-4 mr-1"/> : <Moon className="w-4 h-4 mr-1"/>} {darkMode ? 'Light' : 'Dark'}
+                            </Button>
+                            <Button 
+                                variant="outline"
                                 onClick={() => setIsProfileModalOpen(true)}
-                                className="flex items-center text-xs sm:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5"
+                                className="flex items-center text-xs sm:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-300"
                             >
                                 <User className="w-4 h-4 mr-1"/> Profile
                             </Button>
                             <Button 
                                 variant="outline"
                                 onClick={() => setIsTimerModalOpen(true)}
-                                className="flex items-center text-xs sm:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5"
+                                className="flex items-center text-xs sm:text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-300"
                             >
                                 <Timer className="w-4 h-4 mr-1"/> Timer
                             </Button>
                             <Button
                                 variant="secondary"
                                 onClick={() => signOut(auth)}
-                                className="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1.5 text-xs sm:text-sm"
+                                className="bg-red-100 hover:bg-red-200 text-red-700 px-3 py-1.5 text-xs sm:text-sm dark:bg-red-900 dark:hover:bg-red-800 dark:text-red-300"
                             >
                                 Logout
                             </Button>
                         </div>
                     </div>
 
-                    <div className="flex space-x-2 pt-2 border-t border-gray-100 mt-2 sm:mt-0 sm:border-t-0 sm:pt-0">
+                    <div className="flex space-x-2 pt-2 border-t border-gray-100 mt-2 sm:mt-0 sm:border-t-0 sm:pt-0 dark:border-gray-700">
                         <Button
                             variant={activeSection === 'revision' ? 'primary' : 'outline'}
                             onClick={() => setActiveSection('revision')}
@@ -2370,7 +2529,7 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
                         </Button>
                     </div>
 
-                    <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100 mt-2 sm:mt-0 sm:border-t-0 sm:pt-0">
+                    <div className="flex flex-wrap gap-2 pt-2 border-t border-gray-100 mt-2 sm:mt-0 sm:border-t-0 sm:pt-0 dark:border-gray-700">
                         <Button
                             variant="primary"
                             onClick={() => setIsAddTopicModalOpen(true)}
@@ -2381,14 +2540,14 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
                         <Button
                             variant="secondary"
                             onClick={() => setIsAddSubjectModalOpen(true)}
-                            className="flex-1 min-w-[120px] bg-purple-100 hover:bg-purple-200 text-purple-700"
+                            className="flex-1 min-w-[120px] bg-purple-100 hover:bg-purple-200 text-purple-700 dark:bg-purple-900 dark:hover:bg-purple-800 dark:text-purple-300"
                         >
                             <BookOpen className="w-4 h-4 mr-1" /> Add Subject
                         </Button>
                         <Button
                             variant="secondary"
                             onClick={() => setIsRecycleBinOpen(true)}
-                            className="flex-1 min-w-[120px] bg-gray-100 hover:bg-gray-200 text-gray-700"
+                            className="flex-1 min-w-[120px] bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-300"
                         >
                             <Trash2 className="w-4 h-4 mr-1" /> Bin ({deletedTopics.filter(t => !t.isPermanentDelete).length})
                         </Button>
@@ -2438,10 +2597,37 @@ const AppLogic = ({ userId, topics, subjects, allSubjects, deletedTopics }) => {
                     topic={topicToEdit}
                     subjects={subjects.filter(s => s.type === topicToEdit.type)}
                     isOpen={isEditTopicModalOpen}
-                    onClose={() => setIsEditTopicModalOpen(false)}
+                    onClose={() => {
+                        setIsEditTopicModalOpen(false);
+                        setTopicToEdit(null);
+                    }}
                     onSave={handleEditTopic}
                 />
             )}
+            
+            <ManageSubjectsModal
+                isOpen={isManageRevisionSubjectsOpen}
+                onClose={() => setIsManageRevisionSubjectsOpen(false)}
+                subjects={subjects.filter(s => s.type === 'revision')}
+                onEdit={handleEditSubject}
+                title="Manage Revision Subjects"
+            />
+            <ManageSubjectsModal
+                isOpen={isManageTaskSubjectsOpen}
+                onClose={() => setIsManageTaskSubjectsOpen(false)}
+                subjects={subjects.filter(s => s.type === 'task')}
+                onEdit={handleEditSubject}
+                title="Manage Task Subjects"
+            />
+            <EditSubjectModal
+                isOpen={isEditSubjectModalOpen}
+                onClose={() => {
+                    setIsEditSubjectModalOpen(false);
+                    setEditingSubject(null);
+                }}
+                subject={editingSubject}
+                userId={userId}
+            />
             
             <RecycleBinModal
                 deletedTopics={deletedTopics}
@@ -2572,9 +2758,9 @@ const App = () => {
 
     if (isLoading || !isAppInitialized) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-50">
+            <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
                 <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-blue-500"></div>
-                <p className="ml-4 text-xl text-gray-700 font-semibold">Checking session...</p>
+                <p className="ml-4 text-xl text-gray-700 font-semibold dark:text-gray-300">Checking session...</p>
             </div>
         );
     }
